@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    container_name: pesca_outdoor_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pesca_outdoor}
+      POSTGRES_USER: ${POSTGRES_USER:-pesca}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pesca_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      # PostgreSQL 18 uses /var/lib/postgresql as the persistent volume root.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pesca} -d ${POSTGRES_DB:-pesca_outdoor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    container_name: pesca_outdoor_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://pesca:pesca_dev_password@db:5432/pesca_outdoor}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["/app/scripts/start-dev.sh"]
+
+volumes:
+  postgres_data:

@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Pesca & Outdoor",
+    "slug": "pesca-outdoor",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "bundler": "metro"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#10261C"
+      }
+    },
+    "plugins": [
+      "expo-image"
+    ]
+  }
+}
