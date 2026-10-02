@@ -16,6 +16,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # 0001_initial uses Base.metadata.create_all(). On a completely fresh DB
+    # with newer models loaded, that old migration can already create this
+    # table. The guard keeps both fresh installs and existing upgrades safe.
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("credentials"):
+        return
+
     op.create_table(
         "credentials",
         sa.Column("user_id", sa.Uuid(), nullable=False),
@@ -57,5 +64,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if not sa.inspect(bind).has_table("credentials"):
+        return
+
     op.drop_index("ix_credentials_user_id", table_name="credentials")
     op.drop_table("credentials")

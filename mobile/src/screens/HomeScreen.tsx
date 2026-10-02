@@ -25,7 +25,10 @@ import { ShareMenu } from '../components/ShareMenu';
 import {
   getCredentials,
   getOutdoorContext,
+  getSolunar,
   getTrophies,
+  getTrophyImageDataUrl,
+  getWeather,
   type CredentialRecord,
   type OutdoorContext,
   type SeasonSummary,
@@ -45,6 +48,9 @@ type HomeScreenProps = {
   onOpenConditions: () => void;
   onOpenCredentials: () => void;
   onOpenDeals: () => void;
+  onOpenMap: () => void;
+  onOpenCapture: () => void;
+  onOpenWall: () => void;
 };
 
 const HERO_IMAGE =
@@ -60,6 +66,9 @@ export function HomeScreen({
   onOpenConditions,
   onOpenCredentials,
   onOpenDeals,
+  onOpenMap,
+  onOpenCapture,
+  onOpenWall,
 }: HomeScreenProps) {
   const [items, setItems] = useState<Trophy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +83,17 @@ export function HomeScreen({
     useState<OutdoorContext | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
   const [contextMessage, setContextMessage] = useState('');
+
+  const [heroWeather, setHeroWeather] =
+    useState<{
+      temperature: number | null;
+      wind: number | null;
+    }>({
+      temperature: null,
+      wind: null,
+    });
+  const [heroActivity, setHeroActivity] =
+    useState<number | null>(null);
 
   const [shareTarget, setShareTarget] = useState<ShareTarget>({
     title: 'Pesca & Outdoor',
@@ -121,12 +141,55 @@ export function HomeScreen({
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const result = await getOutdoorContext(
-        position.coords.latitude,
-        position.coords.longitude,
-      );
+      const contextResult =
+        await getOutdoorContext(
+          position.coords.latitude,
+          position.coords.longitude,
+        );
 
-      setOutdoorContext(result);
+      setOutdoorContext(contextResult);
+
+      const [weatherResult, solunarResult] =
+        await Promise.allSettled([
+          getWeather(
+            position.coords.latitude,
+            position.coords.longitude,
+          ),
+          getSolunar(),
+        ]);
+
+      if (weatherResult.status === 'fulfilled') {
+        const weatherPayload =
+          weatherResult.value as {
+            current?: {
+              temperature_2m?: number;
+              wind_speed_10m?: number;
+            };
+          };
+
+        setHeroWeather({
+          temperature:
+            weatherPayload.current?.temperature_2m ??
+            null,
+          wind:
+            weatherPayload.current?.wind_speed_10m ??
+            null,
+        });
+      }
+
+      if (solunarResult.status === 'fulfilled') {
+        const solunarPayload =
+          solunarResult.value as {
+            activity_index?: number;
+          };
+
+        setHeroActivity(
+          typeof solunarPayload.activity_index ===
+            'number'
+            ? solunarPayload.activity_index
+            : null,
+        );
+      }
     } catch (err) {
       setContextMessage(
         err instanceof Error
@@ -219,7 +282,15 @@ export function HomeScreen({
               </View>
 
               <Text style={styles.heroTitle}>
-                Buen momento para salir
+                {heroActivity !== null
+                  ? heroActivity >= 75
+                    ? 'Condiciones muy favorables'
+                    : heroActivity >= 60
+                      ? 'Buen momento para salir'
+                      : heroActivity >= 45
+                        ? 'Condiciones moderadas'
+                        : 'Revisa bien las condiciones'
+                  : 'Revisa las condiciones de hoy'}
               </Text>
 
               <Text style={styles.heroDescription}>
@@ -229,17 +300,29 @@ export function HomeScreen({
               <View style={styles.statsRow}>
                 <Stat
                   icon="thermometer-outline"
-                  value="11°C"
+                  value={
+                    heroWeather.temperature !== null
+                      ? `${Math.round(heroWeather.temperature * 10) / 10}°C`
+                      : '—'
+                  }
                   label="Temperatura"
                 />
                 <Stat
                   icon="navigate-outline"
-                  value="8 km/h"
+                  value={
+                    heroWeather.wind !== null
+                      ? `${Math.round(heroWeather.wind * 10) / 10} km/h`
+                      : '—'
+                  }
                   label="Viento"
                 />
                 <Stat
                   icon="moon-outline"
-                  value="82/100"
+                  value={
+                    heroActivity !== null
+                      ? `${heroActivity}/100`
+                      : '—'
+                  }
                   label="Actividad"
                 />
               </View>
@@ -266,7 +349,7 @@ export function HomeScreen({
               icon="map-outline"
               title="Mapa"
               description="Explora nuevas zonas"
-              onPress={() => {}}
+              onPress={onOpenMap}
             />
 
             <QuickCard
@@ -280,7 +363,7 @@ export function HomeScreen({
               icon="fish-outline"
               title="Captura"
               description="Registra un trofeo"
-              onPress={() => {}}
+              onPress={onOpenCapture}
             />
 
             <QuickCard
@@ -396,7 +479,7 @@ export function HomeScreen({
               </Text>
             </View>
 
-            <Pressable>
+            <Pressable onPress={onOpenWall}>
               <Text style={styles.seeAll}>Ver muro</Text>
             </Pressable>
           </View>
@@ -418,16 +501,10 @@ export function HomeScreen({
               style={styles.trophyCard}
               key={item.id}
             >
-              <View style={styles.realTrophyImage}>
-                <Ionicons
-                  name="image-outline"
-                  size={38}
-                  color="#779083"
-                />
-                <Text style={styles.imagePlaceholderText}>
-                  Fotografía de la captura
-                </Text>
-              </View>
+              <HomeTrophyImage
+                token={token}
+                trophyId={item.id}
+              />
 
               <View style={styles.trophyContent}>
                 <Text style={styles.species}>{item.species_name}</Text>
@@ -451,7 +528,10 @@ export function HomeScreen({
                 ) : null}
 
                 <View style={styles.socialRow}>
-                  <Pressable style={styles.socialItem}>
+                  <Pressable
+                    style={styles.socialItem}
+                    onPress={onOpenWall}
+                  >
                     <Ionicons
                       name="heart-outline"
                       size={20}
@@ -460,7 +540,10 @@ export function HomeScreen({
                     <Text style={styles.socialText}>Me gusta</Text>
                   </Pressable>
 
-                  <Pressable style={styles.socialItem}>
+                  <Pressable
+                    style={styles.socialItem}
+                    onPress={onOpenWall}
+                  >
                     <Ionicons
                       name="chatbubble-outline"
                       size={19}
@@ -504,6 +587,82 @@ export function HomeScreen({
         url={shareTarget.url}
       />
     </>
+  );
+}
+
+
+function HomeTrophyImage({
+  token,
+  trophyId,
+}: {
+  token: string;
+  trophyId: string;
+}) {
+  const [uri, setUri] =
+    useState<string | null>(null);
+  const [loading, setLoading] =
+    useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    getTrophyImageDataUrl(
+      token,
+      trophyId,
+    )
+      .then((result) => {
+        if (active) {
+          setUri(result);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUri(null);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token, trophyId]);
+
+  if (loading) {
+    return (
+      <View style={styles.realTrophyImage}>
+        <ActivityIndicator
+          color="#D9A441"
+        />
+      </View>
+    );
+  }
+
+  if (!uri) {
+    return (
+      <View style={styles.realTrophyImage}>
+        <Ionicons
+          name="image-outline"
+          size={38}
+          color="#779083"
+        />
+        <Text style={styles.imagePlaceholderText}>
+          Sin fotografía
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.realTrophyImage}
+      contentFit="cover"
+      transition={250}
+    />
   );
 }
 

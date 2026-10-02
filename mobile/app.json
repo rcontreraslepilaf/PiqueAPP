@@ -12,12 +12,26 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "cl.pescaoutdoor.app",
       "adaptiveIcon": {
         "backgroundColor": "#10261C"
       }
     },
     "plugins": [
-      "expo-image"
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pesca & Outdoor necesita acceso a tus fotos para registrar capturas, credenciales y tu imagen de perfil.",
+          "cameraPermission": "Pesca & Outdoor necesita acceso a la cámara para fotografiar capturas y credenciales."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pesca & Outdoor usa tu ubicación para clima, spots y privacidad de capturas."
+        }
+      ]
     ]
   }
 }

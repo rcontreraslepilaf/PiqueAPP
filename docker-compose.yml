@@ -27,10 +27,15 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://pesca:pesca_dev_password@db:5432/pesca_outdoor}
+      CREDENTIAL_STORAGE_DIR: ${CREDENTIAL_STORAGE_DIR:-/data/credentials}
+      TROPHY_STORAGE_DIR: ${TROPHY_STORAGE_DIR:-/data/media/trophies}
+      PROFILE_STORAGE_DIR: ${PROFILE_STORAGE_DIR:-/data/media/profiles}
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - credential_files:/data/credentials
+      - media_files:/data/media
     depends_on:
       db:
         condition: service_healthy
@@ -38,3 +43,5 @@ services:
 
 volumes:
   postgres_data:
+  credential_files:
+  media_files:

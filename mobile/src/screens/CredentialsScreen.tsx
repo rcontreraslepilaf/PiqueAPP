@@ -1,12 +1,12 @@
 import {
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,11 +16,16 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 
 import {
   createCredential,
   deleteCredential,
+  deleteCredentialImage,
+  getCredentialImageDataUrl,
   getCredentials,
+  uploadCredentialImage,
   type CredentialRecord,
 } from '../services/api';
 
@@ -38,6 +43,17 @@ export function CredentialsScreen({
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState('');
+  const [uploadingId, setUploadingId] =
+    useState<string | null>(null);
+
+  const [imageModalVisible, setImageModalVisible] =
+    useState(false);
+  const [imageLoading, setImageLoading] =
+    useState(false);
+  const [imageDataUrl, setImageDataUrl] =
+    useState<string | null>(null);
+  const [imageTitle, setImageTitle] =
+    useState('');
 
   const [title, setTitle] =
     useState('Licencia de pesca recreativa');
@@ -173,6 +189,213 @@ export function CredentialsScreen({
         err instanceof Error
           ? err.message
           : 'No se pudo eliminar la credencial.',
+      );
+    }
+  }
+
+  async function pickImage(
+    credential: CredentialRecord,
+  ) {
+    setMessage('');
+
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      setMessage(
+        'Debes permitir acceso a tus imágenes para seleccionar la licencia.',
+      );
+      return;
+    }
+
+    const result =
+      await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.9,
+      });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const asset = result.assets[0];
+
+    if (!asset) {
+      setMessage(
+        'No se pudo obtener la imagen seleccionada.',
+      );
+      return;
+    }
+
+    await uploadSelectedImage(
+      credential,
+      asset,
+    );
+  }
+
+  async function takePhoto(
+    credential: CredentialRecord,
+  ) {
+    setMessage('');
+
+    const permission =
+      await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      setMessage(
+        'Debes permitir acceso a la cámara para fotografiar la licencia.',
+      );
+      return;
+    }
+
+    const result =
+      await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.9,
+      });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const asset = result.assets[0];
+
+    if (!asset) {
+      setMessage(
+        'No se pudo obtener la fotografía.',
+      );
+      return;
+    }
+
+    await uploadSelectedImage(
+      credential,
+      asset,
+    );
+  }
+
+  async function uploadSelectedImage(
+    credential: CredentialRecord,
+    asset: ImagePicker.ImagePickerAsset,
+  ) {
+    setUploadingId(
+      credential.id,
+    );
+    setMessage('');
+
+    try {
+      const mimeType =
+        asset.mimeType === 'image/png'
+          ? 'image/png'
+          : 'image/jpeg';
+
+      const extension =
+        mimeType === 'image/png'
+          ? 'png'
+          : 'jpg';
+
+      await uploadCredentialImage(
+        token,
+        credential.id,
+        {
+          uri: asset.uri,
+          fileName:
+            asset.fileName ??
+            `licencia-${credential.id}.${extension}`,
+          mimeType,
+          webFile:
+            asset.file ?? null,
+        },
+      );
+
+      await load();
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo subir la imagen de la licencia.',
+      );
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function openCredentialImage(
+    credential: CredentialRecord,
+  ) {
+    setImageModalVisible(true);
+    setImageLoading(true);
+    setImageDataUrl(null);
+    setImageTitle(
+      credential.title,
+    );
+    setMessage('');
+
+    try {
+      const dataUrl =
+        await getCredentialImageDataUrl(
+          token,
+          credential.id,
+        );
+
+      setImageDataUrl(
+        dataUrl,
+      );
+    } catch (err) {
+      setImageModalVisible(false);
+
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo mostrar la licencia.',
+      );
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
+  function confirmDeleteImage(
+    credential: CredentialRecord,
+  ) {
+    Alert.alert(
+      'Eliminar imagen',
+      '¿Quieres eliminar la imagen guardada de esta credencial?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar imagen',
+          style: 'destructive',
+          onPress: () => {
+            void removeCredentialImage(
+              credential.id,
+            );
+          },
+        },
+      ],
+    );
+  }
+
+  async function removeCredentialImage(
+    credentialId: string,
+  ) {
+    setMessage('');
+
+    try {
+      await deleteCredentialImage(
+        token,
+        credentialId,
+      );
+
+      await load();
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo eliminar la imagen.',
       );
     }
   }
@@ -317,7 +540,7 @@ export function CredentialsScreen({
                 color="#7A6A49"
               />
               <Text style={styles.documentPendingText}>
-                Carga de PDF o fotografía: la agregaremos en el siguiente paso.
+                Primero guarda la credencial. Después podrás asociar una fotografía JPG o PNG.
               </Text>
             </View>
 
@@ -435,6 +658,21 @@ export function CredentialsScreen({
           <CredentialCard
             key={item.id}
             credential={item}
+            uploading={
+              uploadingId === item.id
+            }
+            onShowImage={() =>
+              void openCredentialImage(item)
+            }
+            onPickImage={() =>
+              void pickImage(item)
+            }
+            onTakePhoto={() =>
+              void takePhoto(item)
+            }
+            onDeleteImage={() =>
+              confirmDeleteImage(item)
+            }
             onDelete={() =>
               confirmDelete(item)
             }
@@ -443,15 +681,82 @@ export function CredentialsScreen({
 
         <View style={styles.bottomSpace} />
       </View>
+
+      <Modal
+        visible={imageModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setImageModalVisible(false)
+        }
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderText}>
+                <Text style={styles.modalEyebrow}>
+                  MIS CREDENCIALES
+                </Text>
+                <Text style={styles.modalTitle}>
+                  {imageTitle}
+                </Text>
+              </View>
+
+              <Pressable
+                style={styles.modalClose}
+                onPress={() =>
+                  setImageModalVisible(false)
+                }
+              >
+                <Ionicons
+                  name="close"
+                  size={23}
+                  color="#173C2C"
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.imageViewer}>
+              {imageLoading ? (
+                <ActivityIndicator
+                  size="large"
+                  color="#D9A441"
+                />
+              ) : imageDataUrl ? (
+                <Image
+                  source={{ uri: imageDataUrl }}
+                  style={styles.licenseImage}
+                  contentFit="contain"
+                  transition={250}
+                />
+              ) : null}
+            </View>
+
+            <Text style={styles.modalNotice}>
+              Copia personal almacenada en tu cuenta. Pesca & Outdoor no reemplaza el documento oficial.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 function CredentialCard({
   credential,
+  uploading,
+  onShowImage,
+  onPickImage,
+  onTakePhoto,
+  onDeleteImage,
   onDelete,
 }: {
   credential: CredentialRecord;
+  uploading: boolean;
+  onShowImage: () => void;
+  onPickImage: () => void;
+  onTakePhoto: () => void;
+  onDeleteImage: () => void;
   onDelete: () => void;
 }) {
   const status =
@@ -537,20 +842,119 @@ function CredentialCard({
         </Text>
       ) : null}
 
-      <View style={styles.cardFooter}>
+      <View style={styles.documentSection}>
         <View style={styles.documentState}>
           <Ionicons
-            name="document-outline"
-            size={17}
+            name={
+              credential.document_url
+                ? 'image-outline'
+                : 'document-outline'
+            }
+            size={18}
             color="#66756D"
           />
           <Text style={styles.documentStateText}>
             {credential.document_url
-              ? 'Documento asociado'
-              : 'Sin archivo adjunto'}
+              ? 'Imagen de licencia guardada'
+              : 'Sin imagen adjunta'}
           </Text>
         </View>
 
+        {uploading ? (
+          <View style={styles.uploadingRow}>
+            <ActivityIndicator
+              size="small"
+              color="#D9A441"
+            />
+            <Text style={styles.uploadingText}>
+              Subiendo imagen…
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.documentActions}>
+            {credential.document_url ? (
+              <>
+                <Pressable
+                  style={styles.primaryDocumentButton}
+                  onPress={onShowImage}
+                >
+                  <Ionicons
+                    name="eye-outline"
+                    size={18}
+                    color="#10261C"
+                  />
+                  <Text style={styles.primaryDocumentText}>
+                    Mostrar licencia
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.secondaryDocumentButton}
+                  onPress={onPickImage}
+                >
+                  <Ionicons
+                    name="images-outline"
+                    size={18}
+                    color="#315D49"
+                  />
+                  <Text style={styles.secondaryDocumentText}>
+                    Cambiar imagen
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.iconDocumentButton}
+                  onPress={onDeleteImage}
+                >
+                  <Ionicons
+                    name="image-outline"
+                    size={18}
+                    color="#9B463A"
+                  />
+                  <Ionicons
+                    name="close-circle"
+                    size={12}
+                    color="#9B463A"
+                    style={styles.smallDeleteIcon}
+                  />
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  style={styles.primaryDocumentButton}
+                  onPress={onPickImage}
+                >
+                  <Ionicons
+                    name="images-outline"
+                    size={18}
+                    color="#10261C"
+                  />
+                  <Text style={styles.primaryDocumentText}>
+                    Elegir imagen
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.secondaryDocumentButton}
+                  onPress={onTakePhoto}
+                >
+                  <Ionicons
+                    name="camera-outline"
+                    size={18}
+                    color="#315D49"
+                  />
+                  <Text style={styles.secondaryDocumentText}>
+                    Tomar foto
+                  </Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.cardFooter}>
         <Pressable
           style={styles.deleteButton}
           onPress={onDelete}
@@ -561,7 +965,7 @@ function CredentialCard({
             color="#9B463A"
           />
           <Text style={styles.deleteText}>
-            Eliminar
+            Eliminar credencial
           </Text>
         </Pressable>
       </View>
@@ -1051,6 +1455,161 @@ const styles =
       lineHeight: 19,
       fontSize: 12,
       marginTop: 14,
+    },
+
+    documentSection: {
+      marginTop: 16,
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: '#ECEFEA',
+      gap: 11,
+    },
+
+    documentActions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 9,
+    },
+
+    primaryDocumentButton: {
+      minHeight: 42,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      backgroundColor: '#D9A441',
+      borderRadius: 12,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+
+    primaryDocumentText: {
+      color: '#10261C',
+      fontSize: 12,
+      fontWeight: '900',
+    },
+
+    secondaryDocumentButton: {
+      minHeight: 42,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      backgroundColor: '#E3ECE6',
+      borderRadius: 12,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+    },
+
+    secondaryDocumentText: {
+      color: '#315D49',
+      fontSize: 12,
+      fontWeight: '900',
+    },
+
+    iconDocumentButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      backgroundColor: '#F7E5E1',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    smallDeleteIcon: {
+      position: 'absolute',
+      right: 6,
+      top: 6,
+    },
+
+    uploadingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: '#F5F0E5',
+      borderRadius: 12,
+      padding: 11,
+    },
+
+    uploadingText: {
+      color: '#7A6A49',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(4,18,14,0.78)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 22,
+    },
+
+    modalCard: {
+      width: '100%',
+      maxWidth: 850,
+      maxHeight: '90%',
+      backgroundColor: '#F4F0E5',
+      borderRadius: 24,
+      padding: 18,
+    },
+
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 14,
+    },
+
+    modalHeaderText: {
+      flex: 1,
+    },
+
+    modalEyebrow: {
+      color: '#A3652E',
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 1.2,
+    },
+
+    modalTitle: {
+      color: '#17291F',
+      fontSize: 20,
+      fontWeight: '900',
+      marginTop: 2,
+    },
+
+    modalClose: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: '#E0E9E3',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    imageViewer: {
+      width: '100%',
+      minHeight: 420,
+      maxHeight: 650,
+      borderRadius: 18,
+      overflow: 'hidden',
+      backgroundColor: '#15271E',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    licenseImage: {
+      width: '100%',
+      height: 560,
+    },
+
+    modalNotice: {
+      color: '#69766E',
+      fontSize: 11,
+      lineHeight: 17,
+      textAlign: 'center',
+      marginTop: 12,
     },
 
     cardFooter: {

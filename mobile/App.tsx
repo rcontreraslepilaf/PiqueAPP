@@ -18,25 +18,38 @@ import {
 } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { CaptureScreen } from './src/screens/CaptureScreen';
 import { CatalogScreen } from './src/screens/CatalogScreen';
 import { ConditionsScreen } from './src/screens/ConditionsScreen';
 import { CredentialsScreen } from './src/screens/CredentialsScreen';
 import { DealsScreen } from './src/screens/DealsScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { MapScreen } from './src/screens/MapScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
+import { WallScreen } from './src/screens/WallScreen';
 
-type Tab = 'home' | 'catalog' | 'deals';
+type Tab =
+  | 'home'
+  | 'map'
+  | 'capture'
+  | 'catalog'
+  | 'profile';
 
 type RootStackParamList = {
   Main: undefined;
   Conditions: undefined;
   Credentials: undefined;
+  Deals: undefined;
+  Wall: undefined;
 };
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const Stack =
+  createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken] =
+    useState<string | null>(null);
 
   if (!token) {
     return (
@@ -49,25 +62,47 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator
+          screenOptions={{ headerShown: false }}
+        >
           <Stack.Screen name="Main">
             {({ navigation }) => (
               <MainScreen
                 token={token}
                 navigation={navigation}
+                onLogout={() => setToken(null)}
               />
             )}
           </Stack.Screen>
 
           <Stack.Screen name="Conditions">
             {({ navigation }) => (
-              <ConditionsScreen onBack={() => navigation.goBack()} />
+              <ConditionsScreen
+                onBack={() => navigation.goBack()}
+              />
             )}
           </Stack.Screen>
 
           <Stack.Screen name="Credentials">
             {({ navigation }) => (
               <CredentialsScreen
+                token={token}
+                onBack={() => navigation.goBack()}
+              />
+            )}
+          </Stack.Screen>
+
+          <Stack.Screen name="Deals">
+            {({ navigation }) => (
+              <DealsScreen
+                onBack={() => navigation.goBack()}
+              />
+            )}
+          </Stack.Screen>
+
+          <Stack.Screen name="Wall">
+            {({ navigation }) => (
+              <WallScreen
                 token={token}
                 onBack={() => navigation.goBack()}
               />
@@ -82,11 +117,17 @@ export default function App() {
 function MainScreen({
   token,
   navigation,
+  onLogout,
 }: {
   token: string;
   navigation: NavigationProp<RootStackParamList>;
+  onLogout: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] =
+    useState<Tab>('home');
+
+  const openWall = () =>
+    navigation.navigate('Wall');
 
   return (
     <SafeAreaView style={styles.shell}>
@@ -96,14 +137,50 @@ function MainScreen({
         {tab === 'home' ? (
           <HomeScreen
             token={token}
-            onOpenConditions={() => navigation.navigate('Conditions')}
-            onOpenCredentials={() => navigation.navigate('Credentials')}
-            onOpenDeals={() => setTab('deals')}
+            onOpenConditions={() =>
+              navigation.navigate('Conditions')
+            }
+            onOpenCredentials={() =>
+              navigation.navigate('Credentials')
+            }
+            onOpenDeals={() =>
+              navigation.navigate('Deals')
+            }
+            onOpenMap={() => setTab('map')}
+            onOpenCapture={() => setTab('capture')}
+            onOpenWall={openWall}
           />
         ) : null}
 
-        {tab === 'catalog' ? <CatalogScreen /> : null}
-        {tab === 'deals' ? <DealsScreen /> : null}
+        {tab === 'map' ? (
+          <MapScreen token={token} />
+        ) : null}
+
+        {tab === 'capture' ? (
+          <CaptureScreen
+            token={token}
+            onOpenWall={openWall}
+          />
+        ) : null}
+
+        {tab === 'catalog' ? (
+          <CatalogScreen
+            onOpenDeals={() =>
+              navigation.navigate('Deals')
+            }
+          />
+        ) : null}
+
+        {tab === 'profile' ? (
+          <ProfileScreen
+            token={token}
+            onOpenCredentials={() =>
+              navigation.navigate('Credentials')
+            }
+            onOpenWall={openWall}
+            onLogout={onLogout}
+          />
+        ) : null}
       </View>
 
       <View style={styles.nav}>
@@ -116,6 +193,19 @@ function MainScreen({
         />
 
         <NavButton
+          active={tab === 'map'}
+          icon="map-outline"
+          activeIcon="map"
+          label="Mapa"
+          onPress={() => setTab('map')}
+        />
+
+        <CaptureNavButton
+          active={tab === 'capture'}
+          onPress={() => setTab('capture')}
+        />
+
+        <NavButton
           active={tab === 'catalog'}
           icon="fish-outline"
           activeIcon="fish"
@@ -124,11 +214,11 @@ function MainScreen({
         />
 
         <NavButton
-          active={tab === 'deals'}
-          icon="pricetag-outline"
-          activeIcon="pricetag"
-          label="Ofertas"
-          onPress={() => setTab('deals')}
+          active={tab === 'profile'}
+          icon="person-outline"
+          activeIcon="person"
+          label="Perfil"
+          onPress={() => setTab('profile')}
         />
       </View>
     </SafeAreaView>
@@ -150,7 +240,7 @@ function NavButton({
 }) {
   return (
     <Pressable
-      style={({ pressed }) => [
+      style={({ pressed }: { pressed: boolean }) => [
         styles.navButton,
         pressed && styles.navButtonPressed,
       ]}
@@ -159,10 +249,55 @@ function NavButton({
       <Ionicons
         name={active ? activeIcon : icon}
         size={21}
-        color={active ? '#D9A441' : '#AFC0B6'}
+        color={
+          active
+            ? '#D9A441'
+            : '#AFC0B6'
+        }
       />
-      <Text style={[styles.navText, active && styles.navTextActive]}>
+      <Text
+        style={[
+          styles.navText,
+          active && styles.navTextActive,
+        ]}
+      >
         {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function CaptureNavButton({
+  active,
+  onPress,
+}: {
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={styles.captureNavWrapper}
+      onPress={onPress}
+    >
+      <View
+        style={[
+          styles.captureNavCircle,
+          active && styles.captureNavCircleActive,
+        ]}
+      >
+        <Ionicons
+          name="add"
+          size={31}
+          color="#10261C"
+        />
+      </View>
+      <Text
+        style={[
+          styles.captureNavText,
+          active && styles.navTextActive,
+        ]}
+      >
+        Captura
       </Text>
     </Pressable>
   );
@@ -178,8 +313,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   nav: {
-    minHeight: 68,
+    minHeight: 72,
     flexDirection: 'row',
+    alignItems: 'stretch',
     backgroundColor: '#10261C',
     borderTopWidth: 1,
     borderTopColor: '#274535',
@@ -189,17 +325,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    minWidth: 58,
   },
   navButtonPressed: {
     opacity: 0.68,
   },
   navText: {
     color: '#AFC0B6',
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
   },
   navTextActive: {
     color: '#D9A441',
     fontWeight: '900',
+  },
+  captureNavWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 7,
+    minWidth: 68,
+  },
+  captureNavCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    marginTop: -20,
+    backgroundColor: '#D9A441',
+    borderWidth: 4,
+    borderColor: '#10261C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureNavCircleActive: {
+    backgroundColor: '#E8BD62',
+    transform: [{ scale: 1.04 }],
+  },
+  captureNavText: {
+    color: '#AFC0B6',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 1,
   },
 });
