@@ -10,31 +10,99 @@ import httpx
 class EnvironmentService:
     WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
     REVERSE_GEOCODE_URL = "https://nominatim.openstreetmap.org/reverse"
+    SEARCH_GEOCODE_URL = "https://nominatim.openstreetmap.org/search"
 
     _nominatim_lock = asyncio.Lock()
     _last_nominatim_request = 0.0
     _reverse_cache: dict[tuple[float, float], dict] = {}
+    _search_cache: dict[str, list[dict]] = {}
 
-    async def current_weather(self, latitude: float, longitude: float) -> dict:
+    async def current_weather(
+        self,
+        latitude: float,
+        longitude: float,
+        day: date | None = None,
+    ) -> dict:
         params = {
             "latitude": latitude,
             "longitude": longitude,
-            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
-            "daily": "sunrise,sunset",
+            "current": (
+                "temperature_2m,apparent_temperature,relative_humidity_2m,"
+                "precipitation,pressure_msl,wind_speed_10m,wind_direction_10m,"
+                "wind_gusts_10m"
+            ),
+            "daily": (
+                "weather_code,temperature_2m_max,temperature_2m_min,"
+                "precipitation_sum,precipitation_probability_max,"
+                "wind_speed_10m_max,wind_gusts_10m_max,sunrise,sunset"
+            ),
             "timezone": "auto",
-            "forecast_days": 2,
+            "forecast_days": 14,
         }
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(self.WEATHER_URL, params=params)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+
+        target_day = day or date.today()
+        payload["selected_day"] = self._selected_daily_weather(
+            payload.get("daily") or {},
+            target_day,
+        )
+        payload["selected_day_requested"] = target_day.isoformat()
+        return payload
+
+    @staticmethod
+    def _selected_daily_weather(daily: dict, day: date) -> dict | None:
+        dates = daily.get("time") or []
+        target = day.isoformat()
+        try:
+            index = dates.index(target)
+        except ValueError:
+            return None
+
+        def item(key: str):
+            values = daily.get(key) or []
+            return values[index] if index < len(values) else None
+
+        return {
+            "date": target,
+            "weather_code": item("weather_code"),
+            "temperature_2m_max": item("temperature_2m_max"),
+            "temperature_2m_min": item("temperature_2m_min"),
+            "precipitation_sum": item("precipitation_sum"),
+            "precipitation_probability_max": item("precipitation_probability_max"),
+            "wind_speed_10m_max": item("wind_speed_10m_max"),
+            "wind_gusts_10m_max": item("wind_gusts_10m_max"),
+            "sunrise": item("sunrise"),
+            "sunset": item("sunset"),
+        }
+
+    async def _nominatim_get(self, url: str, params: dict) -> dict | list:
+        headers = {
+            "User-Agent": "PescaOutdoor/0.2 (development)",
+        }
+
+        async with self._nominatim_lock:
+            elapsed = time.monotonic() - self._last_nominatim_request
+            if elapsed < 1.05:
+                await asyncio.sleep(1.05 - elapsed)
+
+            async with httpx.AsyncClient(
+                timeout=10.0,
+                headers=headers,
+            ) as client:
+                response = await client.get(url, params=params)
+                self._last_nominatim_request = time.monotonic()
+                response.raise_for_status()
+                return response.json()
 
     async def reverse_geocode(self, latitude: float, longitude: float) -> dict:
         """
         Reverse geocoding for the MVP.
 
         We deliberately return only an approximate locality/region and never
-        expose the exact coordinates in the response used by the UI.
+        expose the exact coordinates in the location label used by the UI.
         """
         cache_key = (round(latitude, 3), round(longitude, 3))
         cached = self._reverse_cache.get(cache_key)
@@ -49,29 +117,16 @@ class EnvironmentService:
             "zoom": 10,
             "accept-language": "es",
         }
-        headers = {
-            "User-Agent": "PescaOutdoor/0.1 (development)",
-        }
 
         try:
-            async with self._nominatim_lock:
-                elapsed = time.monotonic() - self._last_nominatim_request
-                if elapsed < 1.05:
-                    await asyncio.sleep(1.05 - elapsed)
-
-                async with httpx.AsyncClient(
-                    timeout=10.0,
-                    headers=headers,
-                ) as client:
-                    response = await client.get(
-                        self.REVERSE_GEOCODE_URL,
-                        params=params,
-                    )
-                    self._last_nominatim_request = time.monotonic()
-                    response.raise_for_status()
-                    payload = response.json()
+            payload = await self._nominatim_get(
+                self.REVERSE_GEOCODE_URL,
+                params,
+            )
         except (httpx.HTTPError, ValueError):
             return {
+                "latitude": latitude,
+                "longitude": longitude,
                 "locality": "Tu zona",
                 "region": None,
                 "country": "Chile",
@@ -80,20 +135,8 @@ class EnvironmentService:
             }
 
         address = payload.get("address") or {}
-
-        locality = (
-            address.get("city")
-            or address.get("town")
-            or address.get("village")
-            or address.get("municipality")
-            or address.get("county")
-            or "Tu zona"
-        )
-        region = (
-            address.get("state")
-            or address.get("region")
-            or address.get("state_district")
-        )
+        locality = self._extract_locality(address, payload)
+        region = self._extract_region(address)
         country = address.get("country") or "Chile"
 
         label_parts = [locality]
@@ -101,6 +144,8 @@ class EnvironmentService:
             label_parts.append(region)
 
         result = {
+            "latitude": latitude,
+            "longitude": longitude,
             "locality": locality,
             "region": region,
             "country": country,
@@ -109,6 +154,93 @@ class EnvironmentService:
         }
         self._reverse_cache[cache_key] = result
         return result
+
+    async def search_locations(self, query: str, limit: int = 6) -> list[dict]:
+        """Search Chilean localities for manual trip planning."""
+        clean_query = " ".join(query.strip().split())
+        cache_key = f"{self._normalize(clean_query)}:{limit}"
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        params = {
+            "q": clean_query,
+            "format": "jsonv2",
+            "addressdetails": 1,
+            "limit": limit,
+            "countrycodes": "cl",
+            "accept-language": "es",
+        }
+
+        try:
+            payload = await self._nominatim_get(
+                self.SEARCH_GEOCODE_URL,
+                params,
+            )
+        except (httpx.HTTPError, ValueError):
+            return []
+
+        results: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+
+        for item in payload if isinstance(payload, list) else []:
+            address = item.get("address") or {}
+            locality = self._extract_locality(address, item)
+            region = self._extract_region(address)
+            country = address.get("country") or "Chile"
+
+            try:
+                latitude = float(item.get("lat"))
+                longitude = float(item.get("lon"))
+            except (TypeError, ValueError):
+                continue
+
+            label_parts = [locality]
+            if region and self._normalize(region) not in self._normalize(locality):
+                label_parts.append(region)
+            label = ", ".join(label_parts)
+
+            dedupe_key = (self._normalize(label), f"{latitude:.3f},{longitude:.3f}")
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            results.append(
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "locality": locality,
+                    "region": region,
+                    "country": country,
+                    "label": label,
+                    "provider": "© OpenStreetMap contributors",
+                }
+            )
+
+        self._search_cache[cache_key] = results
+        return results
+
+    @staticmethod
+    def _extract_locality(address: dict, payload: dict) -> str:
+        return (
+            address.get("city")
+            or address.get("town")
+            or address.get("village")
+            or address.get("municipality")
+            or address.get("county")
+            or address.get("city_district")
+            or address.get("suburb")
+            or payload.get("name")
+            or "Zona seleccionada"
+        )
+
+    @staticmethod
+    def _extract_region(address: dict) -> str | None:
+        return (
+            address.get("state")
+            or address.get("region")
+            or address.get("state_district")
+        )
 
     async def outdoor_context(
         self,

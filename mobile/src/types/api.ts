@@ -69,6 +69,14 @@ export type TrophyCreatePayload = {
   equipment_ids?: string[];
 };
 
+export type FeedEquipment = {
+  id: string;
+  category: string;
+  brand: string | null;
+  model: string | null;
+  name: string;
+};
+
 export type FeedItem = {
   id: string;
   user_id: string;
@@ -87,6 +95,7 @@ export type FeedItem = {
   like_count: number;
   comment_count: number;
   liked_by_me: boolean;
+  equipment: FeedEquipment[];
 };
 
 export type TrophyComment = {
@@ -164,4 +173,18 @@ export type Deal = {
   available_votes: number;
   expired_votes: number;
   wrong_price_votes: number;
+};
+
+
+export type AffiliateRecommendation = {
+  platform: 'mercadolibre' | 'temu' | 'ebay' | 'aliexpress';
+  platform_label: string;
+  item_id: string;
+  title: string;
+  image_url: string | null;
+  price: number | null;
+  currency: string | null;
+  affiliate_url: string;
+  source_url: string | null;
+  fetched_at: string;
 };

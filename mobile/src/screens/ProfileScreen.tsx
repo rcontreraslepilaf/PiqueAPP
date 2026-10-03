@@ -14,12 +14,15 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 
 import {
+  deleteTrophy,
+  getFeed,
   getMyProfile,
   getProfileAvatarDataUrl,
+  getTrophyImageDataUrl,
   updateMyProfile,
   uploadProfileAvatar,
 } from '../services/api';
-import type { ProfileSummary } from '../types/api';
+import type { FeedItem, ProfileSummary } from '../types/api';
 
 export function ProfileScreen({
   token,
@@ -41,6 +44,11 @@ export function ProfileScreen({
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState('');
+  const [activity, setActivity] = useState<FeedItem[]>([]);
+  const [deleteConfirmId, setDeleteConfirmId] =
+    useState<string | null>(null);
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -56,6 +64,12 @@ export function ProfileScreen({
       setDisplayName(result.display_name);
       setBio(result.bio ?? '');
       setRegion(result.region ?? '');
+
+      try {
+        setActivity(await getFeed(token, true));
+      } catch {
+        setActivity([]);
+      }
 
       if (result.avatar_url) {
         try {
@@ -181,6 +195,42 @@ export function ProfileScreen({
       );
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function removeCapture(item: FeedItem) {
+    if (deleteConfirmId !== item.id) {
+      setDeleteConfirmId(item.id);
+      setMessage('Pulsa nuevamente Eliminar para confirmar.');
+      return;
+    }
+
+    setDeletingId(item.id);
+    setMessage('');
+
+    try {
+      await deleteTrophy(token, item.id);
+      setActivity((current) =>
+        current.filter((candidate) => candidate.id !== item.id),
+      );
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              trophy_count: Math.max(0, current.trophy_count - 1),
+            }
+          : current,
+      );
+      setDeleteConfirmId(null);
+      setMessage('Captura eliminada correctamente.');
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo eliminar la captura.',
+      );
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -310,6 +360,31 @@ export function ProfileScreen({
                 label="Capturas"
               />
               <StatCard
+                icon="sparkles-outline"
+                value={new Set(
+                  activity.map((item) =>
+                    item.species_name.trim().toLocaleLowerCase('es-CL'),
+                  ),
+                ).size}
+                label="Especies"
+              />
+              <StatCard
+                icon="heart-outline"
+                value={activity.reduce(
+                  (total, item) => total + item.like_count,
+                  0,
+                )}
+                label="Me gusta"
+              />
+              <StatCard
+                icon="chatbubble-outline"
+                value={activity.reduce(
+                  (total, item) => total + item.comment_count,
+                  0,
+                )}
+                label="Comentarios"
+              />
+              <StatCard
                 icon="card-outline"
                 value={profile.credential_count}
                 label="Credenciales"
@@ -379,16 +454,98 @@ export function ProfileScreen({
               </View>
             ) : null}
 
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitleCompact}>
+                  Mis capturas
+                </Text>
+                <Text style={styles.sectionSubtitle}>
+                  Tu galería reciente y sus interacciones
+                </Text>
+              </View>
+              <Pressable onPress={onOpenWall}>
+                <Text style={styles.seeAll}>Ver muro</Text>
+              </Pressable>
+            </View>
+
+            {activity.length === 0 ? (
+              <View style={styles.emptyActivityCard}>
+                <Ionicons
+                  name="images-outline"
+                  size={34}
+                  color="#315D49"
+                />
+                <Text style={styles.emptyActivityTitle}>
+                  Aún no tienes capturas
+                </Text>
+                <Text style={styles.emptyActivityText}>
+                  Cuando registres una aventura aparecerá aquí.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.captureGrid}>
+                {activity.slice(0, 6).map((item) => (
+                  <View
+                    key={item.id}
+                    style={styles.captureCard}
+                  >
+                    <ProfileCaptureImage
+                      token={token}
+                      trophyId={item.id}
+                      hasImage={item.has_image}
+                    />
+
+                    <View style={styles.captureContent}>
+                      <Text style={styles.captureSpecies}>
+                        {item.species_name}
+                      </Text>
+                      <Text
+                        style={styles.captureTitle}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text style={styles.captureMeta}>
+                        {formatDateTime(item.captured_at)} · {item.like_count} ♥ · {item.comment_count} comentarios
+                      </Text>
+
+                      <Pressable
+                        style={[
+                          styles.deleteCaptureButton,
+                          deleteConfirmId === item.id &&
+                            styles.deleteCaptureButtonConfirm,
+                        ]}
+                        disabled={deletingId === item.id}
+                        onPress={() => void removeCapture(item)}
+                      >
+                        {deletingId === item.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#9B463A"
+                          />
+                        ) : (
+                          <Ionicons
+                            name="trash-outline"
+                            size={17}
+                            color="#9B463A"
+                          />
+                        )}
+                        <Text style={styles.deleteCaptureText}>
+                          {deleteConfirmId === item.id
+                            ? 'Confirmar eliminar'
+                            : 'Eliminar'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <Text style={styles.sectionTitle}>
               Mi actividad
             </Text>
 
-            <MenuButton
-              icon="images-outline"
-              title="Mis capturas"
-              subtitle="Revisa tus publicaciones en el muro"
-              onPress={onOpenWall}
-            />
             <MenuButton
               icon="card-outline"
               title="Mis credenciales"
@@ -415,6 +572,87 @@ export function ProfileScreen({
       </View>
     </ScrollView>
   );
+}
+
+function ProfileCaptureImage({
+  token,
+  trophyId,
+  hasImage,
+}: {
+  token: string;
+  trophyId: string;
+  hasImage: boolean;
+}) {
+  const [uri, setUri] = useState<string | null>(null);
+  const [loading, setLoading] = useState(hasImage);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!hasImage) {
+      setLoading(false);
+      setUri(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    setLoading(true);
+    getTrophyImageDataUrl(token, trophyId)
+      .then((result) => {
+        if (active) setUri(result);
+      })
+      .catch(() => {
+        if (active) setUri(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [hasImage, token, trophyId]);
+
+  if (loading) {
+    return (
+      <View style={styles.captureImageState}>
+        <ActivityIndicator color="#D9A441" />
+      </View>
+    );
+  }
+
+  if (!uri) {
+    return (
+      <View style={styles.captureImageState}>
+        <Ionicons
+          name="image-outline"
+          size={30}
+          color="#6B8377"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.captureImage}
+      contentFit="cover"
+      transition={200}
+    />
+  );
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat('es-CL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
 }
 
 function Field({
@@ -753,6 +991,114 @@ const styles = StyleSheet.create({
   messageText: {
     color: '#80572D',
     fontSize: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 24,
+    marginBottom: 10,
+  },
+  sectionTitleCompact: {
+    color: '#17291F',
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  sectionSubtitle: {
+    color: '#748078',
+    fontSize: 11,
+    marginTop: 3,
+  },
+  seeAll: {
+    color: '#A3652E',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  emptyActivityCard: {
+    minHeight: 150,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  emptyActivityTitle: {
+    color: '#17291F',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+  emptyActivityText: {
+    color: '#748078',
+    fontSize: 11,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  captureGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  captureCard: {
+    flexGrow: 1,
+    flexBasis: 260,
+    maxWidth: 450,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  captureImage: {
+    width: '100%',
+    height: 170,
+    backgroundColor: '#DDE8E0',
+  },
+  captureImageState: {
+    width: '100%',
+    height: 170,
+    backgroundColor: '#DDE8E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureContent: {
+    padding: 12,
+  },
+  captureSpecies: {
+    color: '#A3652E',
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  captureTitle: {
+    color: '#17291F',
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  captureMeta: {
+    color: '#748078',
+    fontSize: 10,
+    marginTop: 5,
+  },
+  deleteCaptureButton: {
+    alignSelf: 'flex-start',
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#F7E5E1',
+  },
+  deleteCaptureButtonConfirm: {
+    borderWidth: 1,
+    borderColor: '#C76A5B',
+  },
+  deleteCaptureText: {
+    color: '#9B463A',
+    fontSize: 10,
+    fontWeight: '900',
   },
   sectionTitle: {
     color: '#17291F',

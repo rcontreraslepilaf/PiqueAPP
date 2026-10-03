@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, get_db
 from app.models.enums import MediaType, Visibility
@@ -12,6 +12,7 @@ from app.models.user import Profile, User
 from app.schemas.social import (
     CommentCreate,
     CommentRead,
+    FeedEquipmentRead,
     FeedItemRead,
     LikeStateRead,
 )
@@ -55,7 +56,12 @@ def feed(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    stmt = select(Trophy).order_by(Trophy.captured_at.desc()).limit(limit)
+    stmt = (
+        select(Trophy)
+        .options(selectinload(Trophy.equipment))
+        .order_by(Trophy.captured_at.desc())
+        .limit(limit)
+    )
 
     if mine:
         stmt = stmt.where(Trophy.user_id == current_user.id)
@@ -131,6 +137,16 @@ def feed(
                 like_count=like_count,
                 comment_count=comment_count,
                 liked_by_me=liked_by_me,
+                equipment=[
+                    FeedEquipmentRead(
+                        id=item.id,
+                        category=item.category,
+                        brand=item.brand,
+                        model=item.model,
+                        name=item.name,
+                    )
+                    for item in trophy.equipment
+                ],
             )
         )
 

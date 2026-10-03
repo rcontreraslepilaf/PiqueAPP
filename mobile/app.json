@@ -31,7 +31,8 @@
         {
           "locationWhenInUsePermission": "Pesca & Outdoor usa tu ubicación para clima, spots y privacidad de capturas."
         }
-      ]
+      ],
+      "expo-video"
     ]
   }
 }

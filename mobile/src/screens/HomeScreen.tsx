@@ -19,10 +19,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Location from 'expo-location';
 
 import { ShareMenu } from '../components/ShareMenu';
+import { AnimatedBackground } from '../components/AnimatedBackground';
 import {
+  getAffiliateRecommendations,
   getCredentials,
   getOutdoorContext,
   getSolunar,
@@ -33,7 +36,7 @@ import {
   type OutdoorContext,
   type SeasonSummary,
 } from '../services/api';
-import type { Trophy } from '../types/api';
+import type { AffiliateRecommendation, Trophy } from '../types/api';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -53,8 +56,7 @@ type HomeScreenProps = {
   onOpenWall: () => void;
 };
 
-const HERO_IMAGE =
-  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=85';
+const HERO_VIDEO = require('../../assets/videos/video-trucha-home.mp4');
 
 const TROPHY_DEMO =
   'https://images.unsplash.com/photo-1544551763-77ef2d0cfc6c?auto=format&fit=crop&w=1400&q=85';
@@ -70,9 +72,25 @@ export function HomeScreen({
   onOpenCapture,
   onOpenWall,
 }: HomeScreenProps) {
+  const heroVideoPlayer = useVideoPlayer(HERO_VIDEO);
+
+  useEffect(() => {
+    heroVideoPlayer.loop = true;
+    heroVideoPlayer.muted = true;
+    heroVideoPlayer.play();
+
+    return () => {
+      heroVideoPlayer.pause();
+    };
+  }, [heroVideoPlayer]);
+
   const [items, setItems] = useState<Trophy[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareVisible, setShareVisible] = useState(false);
+
+  const [affiliateRecommendations, setAffiliateRecommendations] =
+    useState<AffiliateRecommendation[]>([]);
+  const [affiliateLoading, setAffiliateLoading] = useState(true);
 
   const [credentials, setCredentials] =
     useState<CredentialRecord[]>([]);
@@ -106,6 +124,13 @@ export function HomeScreen({
       .then(setItems)
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    getAffiliateRecommendations()
+      .then(setAffiliateRecommendations)
+      .catch(() => setAffiliateRecommendations([]))
+      .finally(() => setAffiliateLoading(false));
+  }, []);
 
   useEffect(() => {
     getCredentials(token)
@@ -224,6 +249,7 @@ export function HomeScreen({
 
   return (
     <>
+      <AnimatedBackground intensity="soft">
       <ScrollView
         style={styles.screen}
         contentContainerStyle={styles.page}
@@ -254,11 +280,11 @@ export function HomeScreen({
           </View>
 
           <View style={styles.hero}>
-            <Image
-              source={{ uri: HERO_IMAGE }}
+            <VideoView
+              player={heroVideoPlayer}
               style={StyleSheet.absoluteFill}
               contentFit="cover"
-              transition={450}
+              nativeControls={false}
             />
 
             <LinearGradient
@@ -368,8 +394,8 @@ export function HomeScreen({
 
             <QuickCard
               icon="pricetag-outline"
-              title="Ofertas"
-              description="Encuentra buenos precios"
+              title="Comprar"
+              description="Productos y enlaces recomendados"
               onPress={onOpenDeals}
             />
           </View>
@@ -394,7 +420,7 @@ export function HomeScreen({
                 <Ionicons
                   name="refresh-outline"
                   size={19}
-                  color="#315D49"
+                  color="#64C8F5"
                 />
               </Pressable>
             ) : null}
@@ -432,9 +458,9 @@ export function HomeScreen({
 
           <View style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle}>Ofertas destacadas</Text>
+              <Text style={styles.sectionTitle}>Productos recomendados</Text>
               <Text style={styles.sectionSubtitle}>
-                Equipamiento que vale la pena mirar
+                Compara y compra desde tiendas externas
               </Text>
             </View>
 
@@ -443,33 +469,52 @@ export function HomeScreen({
             </Pressable>
           </View>
 
-          <Pressable style={styles.dealCard} onPress={onOpenDeals}>
-            <View style={styles.dealPlaceholder}>
-              <Ionicons
-                name="fish-outline"
-                size={48}
-                color="#315D49"
-              />
-            </View>
-
-            <View style={styles.dealContent}>
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountText}>OFERTA DEMO</Text>
-              </View>
-
-              <Text style={styles.dealBrand}>SHIMANO</Text>
-              <Text style={styles.dealName}>Sedona 2500</Text>
-
-              <View style={styles.priceRow}>
-                <Text style={styles.currentPrice}>$49.990</Text>
-                <Text style={styles.oldPrice}>$69.990</Text>
-              </View>
-
-              <Text style={styles.dealNote}>
-                Más adelante este precio vendrá desde la API.
+          {affiliateLoading ? (
+            <View style={styles.affiliateLoadingCard}>
+              <ActivityIndicator size="small" color="#39B5FF" />
+              <Text style={styles.affiliateLoadingText}>
+                Buscando recomendaciones...
               </Text>
             </View>
-          </Pressable>
+          ) : affiliateRecommendations.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.affiliateRow}
+            >
+              {affiliateRecommendations.map((product) => (
+                <AffiliateRecommendationCard
+                  key={`${product.platform}-${product.item_id}`}
+                  product={product}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <Pressable style={styles.dealCard} onPress={onOpenDeals}>
+              <View style={styles.dealPlaceholder}>
+                <Ionicons
+                  name="bag-handle-outline"
+                  size={44}
+                  color="#64C8F5"
+                />
+              </View>
+
+              <View style={styles.dealContent}>
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountText}>PRÓXIMAMENTE</Text>
+                </View>
+
+                <Text style={styles.dealBrand}>RECOMENDADOS</Text>
+                <Text style={styles.dealName}>
+                  Productos desde tiendas externas
+                </Text>
+
+                <Text style={styles.dealNote}>
+                  Al conectar la cuenta de afiliado, PiqueAPP mostrará imágenes y datos remotos sin guardar las fotos.
+                </Text>
+              </View>
+            </Pressable>
+          )}
 
           <View style={styles.sectionHeaderRow}>
             <View>
@@ -487,7 +532,7 @@ export function HomeScreen({
           {loading ? (
             <ActivityIndicator
               size="large"
-              color="#D9A441"
+              color="#39B5FF"
               style={styles.loading}
             />
           ) : null}
@@ -578,6 +623,7 @@ export function HomeScreen({
           <View style={styles.bottomSpace} />
         </View>
       </ScrollView>
+      </AnimatedBackground>
 
       <ShareMenu
         visible={shareVisible}
@@ -635,7 +681,7 @@ function HomeTrophyImage({
     return (
       <View style={styles.realTrophyImage}>
         <ActivityIndicator
-          color="#D9A441"
+          color="#39B5FF"
         />
       </View>
     );
@@ -679,7 +725,7 @@ function CredentialHomeCard({
   if (loading) {
     return (
       <View style={styles.credentialHomeCard}>
-        <ActivityIndicator color="#D9A441" />
+        <ActivityIndicator color="#39B5FF" />
         <Text style={styles.credentialHomeMuted}>
           Revisando credenciales…
         </Text>
@@ -697,7 +743,7 @@ function CredentialHomeCard({
           <Ionicons
             name="card-outline"
             size={25}
-            color="#D9A441"
+            color="#39B5FF"
           />
         </View>
 
@@ -713,7 +759,7 @@ function CredentialHomeCard({
         <Ionicons
           name="chevron-forward"
           size={21}
-          color="#66756D"
+          color="#91AAB4"
         />
       </Pressable>
     );
@@ -732,7 +778,7 @@ function CredentialHomeCard({
         <Ionicons
           name="fish-outline"
           size={25}
-          color="#D9A441"
+          color="#39B5FF"
         />
       </View>
 
@@ -830,7 +876,7 @@ function SeasonPanel({
   if (loading) {
     return (
       <View style={styles.seasonStateCard}>
-        <ActivityIndicator color="#D9A441" />
+        <ActivityIndicator color="#39B5FF" />
         <Text style={styles.seasonStateText}>
           Revisando ubicación y temporadas…
         </Text>
@@ -845,7 +891,7 @@ function SeasonPanel({
           <Ionicons
             name="location-outline"
             size={24}
-            color="#315D49"
+            color="#64C8F5"
           />
         </View>
 
@@ -975,7 +1021,7 @@ function SeasonRow({
           <Ionicons
             name="open-outline"
             size={14}
-            color="#A3652E"
+            color="#F0B34C"
           />
         </Pressable>
       </View>
@@ -1028,6 +1074,95 @@ function getSeasonVisual(
   }
 }
 
+
+function AffiliateRecommendationCard({
+  product,
+}: {
+  product: AffiliateRecommendation;
+}) {
+  async function openAffiliateLink() {
+    if (!product.affiliate_url) {
+      return;
+    }
+
+    const supported = await Linking.canOpenURL(product.affiliate_url);
+    if (supported) {
+      await Linking.openURL(product.affiliate_url);
+    }
+  }
+
+  const priceText =
+    product.price !== null && product.currency
+      ? new Intl.NumberFormat('es-CL', {
+          style: 'currency',
+          currency: product.currency,
+          maximumFractionDigits: 0,
+        }).format(product.price)
+      : 'Ver precio';
+
+  return (
+    <Pressable
+      style={styles.affiliateCard}
+      onPress={() => void openAffiliateLink()}
+    >
+      <View style={styles.affiliateImageWrap}>
+        {product.image_url ? (
+          <Image
+            source={{ uri: product.image_url }}
+            style={styles.affiliateImage}
+            contentFit="contain"
+            transition={250}
+          />
+        ) : (
+          <View style={styles.affiliateImageFallback}>
+            <Ionicons
+              name="image-outline"
+              size={32}
+              color="#6D7B74"
+            />
+          </View>
+        )}
+
+        <View style={styles.affiliateBadge}>
+          <Text style={styles.affiliateBadgeText}>AFILIADO</Text>
+        </View>
+      </View>
+
+      <View style={styles.affiliateCardBody}>
+        <Text style={styles.affiliatePlatform}>
+          {product.platform_label}
+        </Text>
+
+        <Text
+          style={styles.affiliateTitle}
+          numberOfLines={2}
+        >
+          {product.title}
+        </Text>
+
+        <Text style={styles.affiliatePrice}>
+          {priceText}
+        </Text>
+
+        <View style={styles.affiliateButton}>
+          <Text style={styles.affiliateButtonText}>
+            Ver producto
+          </Text>
+          <Ionicons
+            name="open-outline"
+            size={16}
+            color="#FFFFFF"
+          />
+        </View>
+
+        <Text style={styles.affiliateDisclosure}>
+          Enlace de afiliado
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function Stat({
   icon,
   value,
@@ -1039,7 +1174,7 @@ function Stat({
 }) {
   return (
     <View style={styles.stat}>
-      <Ionicons name={icon} size={20} color="#D9A441" />
+      <Ionicons name={icon} size={20} color="#39B5FF" />
       <View>
         <Text style={styles.statValue}>{value}</Text>
         <Text style={styles.statLabel}>{label}</Text>
@@ -1142,7 +1277,7 @@ function AnimatedButton({
         <Ionicons
           name={icon}
           size={18}
-          color="#10261C"
+          color="#031A22"
         />
       </Pressable>
     </Animated.View>
@@ -1250,11 +1385,11 @@ function DemoTrophyCard({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F4F0E5',
+    backgroundColor: 'transparent',
   },
   page: {
     flexGrow: 1,
-    backgroundColor: '#F4F0E5',
+    backgroundColor: 'transparent',
   },
   container: {
     width: '100%',
@@ -1274,20 +1409,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eyebrow: {
-    color: '#A3652E',
+    color: '#F0B34C',
     fontWeight: '900',
     letterSpacing: 1.6,
     fontSize: 12,
   },
   title: {
-    color: '#14251C',
+    color: '#F3FAFF',
     fontSize: 30,
     lineHeight: 35,
     fontWeight: '900',
     marginTop: 6,
   },
   subtitle: {
-    color: '#68756D',
+    color: '#9FB7C2',
     fontSize: 15,
     marginTop: 5,
   },
@@ -1295,7 +1430,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#123D2D',
+    backgroundColor: '#073B4A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1304,7 +1439,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#D9A441',
+    backgroundColor: '#39B5FF',
     right: 10,
     top: 9,
   },
@@ -1313,7 +1448,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    backgroundColor: '#10261C',
+    backgroundColor: '#031A22',
     marginBottom: 34,
   },
   heroContent: {
@@ -1377,13 +1512,13 @@ const styles = StyleSheet.create({
     minHeight: 46,
     paddingHorizontal: 18,
     borderRadius: 999,
-    backgroundColor: '#D9A441',
+    backgroundColor: '#39B5FF',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   heroButtonText: {
-    color: '#10261C',
+    color: '#031A22',
     fontWeight: '900',
   },
   sectionHeader: {
@@ -1398,17 +1533,17 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionTitle: {
-    color: '#16271E',
+    color: '#F3FAFF',
     fontSize: 22,
     fontWeight: '900',
   },
   sectionSubtitle: {
-    color: '#728078',
+    color: '#8EA8B3',
     fontSize: 14,
     marginTop: 3,
   },
   seeAll: {
-    color: '#A3652E',
+    color: '#F0B34C',
     fontWeight: '900',
     fontSize: 13,
   },
@@ -1423,7 +1558,9 @@ const styles = StyleSheet.create({
   },
   quickCard: {
     minHeight: 132,
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 207, 244, 0.14)',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
     borderRadius: 20,
     padding: 17,
     justifyContent: 'center',
@@ -1439,18 +1576,18 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E2ECE6',
+    backgroundColor: 'rgba(57, 181, 255, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 11,
   },
   quickTitle: {
-    color: '#17291F',
+    color: '#EDF8FC',
     fontWeight: '900',
     fontSize: 16,
   },
   quickDescription: {
-    color: '#768078',
+    color: '#91AAB4',
     marginTop: 3,
     fontSize: 13,
   },
@@ -1458,18 +1595,20 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#E3ECE6',
+    backgroundColor: 'rgba(57, 181, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   seasonCard: {
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(123, 207, 244, 0.12)',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
     borderRadius: 22,
     overflow: 'hidden',
   },
   seasonStateCard: {
     minHeight: 120,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
     borderRadius: 22,
     padding: 18,
     flexDirection: 'row',
@@ -1480,7 +1619,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 15,
-    backgroundColor: '#E3ECE6',
+    backgroundColor: 'rgba(57, 181, 255, 0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1488,24 +1627,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   seasonStateTitle: {
-    color: '#17291F',
+    color: '#EDF8FC',
     fontSize: 15,
     fontWeight: '900',
   },
   seasonStateText: {
-    color: '#6D7A72',
+    color: '#91AAB4',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 3,
   },
   locationButton: {
-    backgroundColor: '#D9A441',
+    backgroundColor: '#39B5FF',
     borderRadius: 999,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
   locationButtonText: {
-    color: '#10261C',
+    color: '#031A22',
     fontWeight: '900',
     fontSize: 12,
   },
@@ -1515,7 +1654,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#ECEFEA',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   seasonRowLast: {
     borderBottomWidth: 0,
@@ -1538,7 +1677,7 @@ const styles = StyleSheet.create({
   },
   seasonSpecies: {
     flex: 1,
-    color: '#17291F',
+    color: '#EDF8FC',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1552,13 +1691,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   seasonPeriod: {
-    color: '#4E6257',
+    color: '#B1C7D0',
     fontWeight: '800',
     fontSize: 12,
     marginTop: 4,
   },
   seasonSummary: {
-    color: '#748078',
+    color: '#91AAB4',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 4,
@@ -1571,7 +1710,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   sourceLinkText: {
-    color: '#A3652E',
+    color: '#F0B34C',
     fontSize: 11,
     fontWeight: '900',
   },
@@ -1584,12 +1723,12 @@ const styles = StyleSheet.create({
     paddingTop: 14,
   },
   seasonFooterText: {
-    color: '#66756D',
+    color: '#91AAB4',
     fontSize: 10,
     textAlign: 'center',
   },
   seasonNotice: {
-    color: '#8A928D',
+    color: '#7F99A5',
     fontSize: 10,
     lineHeight: 15,
     textAlign: 'center',
@@ -1599,10 +1738,12 @@ const styles = StyleSheet.create({
   },
   credentialHomeCard: {
     minHeight: 92,
+    borderWidth: 1,
+    borderColor: 'rgba(123, 207, 244, 0.12)',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
     borderRadius: 20,
     paddingHorizontal: 17,
     paddingVertical: 15,
@@ -1612,7 +1753,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 15,
-    backgroundColor: '#173C2C',
+    backgroundColor: '#073B4A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1622,13 +1763,13 @@ const styles = StyleSheet.create({
   },
 
   credentialHomeTitle: {
-    color: '#17291F',
+    color: '#EDF8FC',
     fontSize: 15,
     fontWeight: '900',
   },
 
   credentialHomeMuted: {
-    color: '#748078',
+    color: '#91AAB4',
     fontSize: 12,
     lineHeight: 17,
     marginTop: 3,
@@ -1650,7 +1791,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
   },
   dealPlaceholder: {
     width: '38%',
@@ -1678,7 +1819,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   dealBrand: {
-    color: '#A3652E',
+    color: '#F0B34C',
     fontWeight: '900',
     fontSize: 11,
     letterSpacing: 1,
@@ -1710,7 +1851,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   trophyCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
     borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 18,
@@ -1723,13 +1864,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     left: 16,
-    backgroundColor: '#D9A441',
+    backgroundColor: '#39B5FF',
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
   },
   demoBadgeText: {
-    color: '#10261C',
+    color: '#031A22',
     fontWeight: '900',
     fontSize: 10,
   },
@@ -1822,5 +1963,109 @@ const styles = StyleSheet.create({
   },
   bottomSpace: {
     height: 30,
+  },
+
+  affiliateLoadingCard: {
+    minHeight: 120,
+    borderRadius: 20,
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
+    borderWidth: 1,
+    borderColor: '#E6EBE8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  affiliateLoadingText: {
+    color: '#66716B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  affiliateRow: {
+    gap: 14,
+    paddingRight: 4,
+    paddingBottom: 6,
+  },
+  affiliateCard: {
+    width: 210,
+    overflow: 'hidden',
+    borderRadius: 20,
+    backgroundColor: 'rgba(6, 31, 41, 0.82)',
+    borderWidth: 1,
+    borderColor: '#E3E9E5',
+  },
+  affiliateImageWrap: {
+    height: 150,
+    backgroundColor: '#F5F7F6',
+    position: 'relative',
+  },
+  affiliateImage: {
+    width: '100%',
+    height: '100%',
+  },
+  affiliateImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  affiliateBadge: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    borderRadius: 999,
+    backgroundColor: '#39B5FF',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  affiliateBadgeText: {
+    color: '#1B251F',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+  },
+  affiliateCardBody: {
+    padding: 14,
+  },
+  affiliatePlatform: {
+    color: '#66716B',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginBottom: 5,
+  },
+  affiliateTitle: {
+    color: '#18231E',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+    minHeight: 40,
+  },
+  affiliatePrice: {
+    color: '#64C8F5',
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  affiliateButton: {
+    borderRadius: 12,
+    backgroundColor: '#64C8F5',
+    minHeight: 40,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  affiliateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  affiliateDisclosure: {
+    marginTop: 8,
+    color: '#7B8680',
+    fontSize: 10,
+    textAlign: 'center',
   },
 });

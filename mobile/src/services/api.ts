@@ -1,8 +1,12 @@
 import type {
+  AffiliateRecommendation,
   Deal,
+  DealCreatePayload,
   FeedItem,
   LikeState,
+  OfferValidationStatus,
   Product,
+  ProductOffer,
   ProfileSummary,
   ProfileUpdatePayload,
   Spot,
@@ -11,6 +15,8 @@ import type {
   Trophy,
   TrophyComment,
   TrophyCreatePayload,
+  WardrobeItem,
+  WardrobeItemCreatePayload,
 } from '../types/api';
 
 export type OutdoorLocation = {
@@ -19,6 +25,12 @@ export type OutdoorLocation = {
   country: string;
   label: string;
   provider: string;
+};
+
+
+export type ExploreLocation = OutdoorLocation & {
+  latitude: number;
+  longitude: number;
 };
 
 export type SeasonSummary = {
@@ -599,53 +611,199 @@ export function getProfileAvatarDataUrl(
 }
 
 /* =========================================================
+   RECOMENDACIONES / AFILIADOS
+========================================================= */
+
+export function getAffiliateRecommendations(): Promise<
+  AffiliateRecommendation[]
+> {
+  return request<AffiliateRecommendation[]>(
+    '/affiliate/recommendations',
+  );
+}
+
+/* =========================================================
    CATÁLOGO / OFERTAS
 ========================================================= */
 
+export type ProductSearchFilters = {
+  category?: string;
+  region?: string;
+  species?: string;
+  limit?: number;
+};
+
 export function getProducts(
   q = '',
+  filters: ProductSearchFilters = {},
 ): Promise<Product[]> {
-  const query = q
-    ? `?q=${encodeURIComponent(q)}`
-    : '';
+  const params = new URLSearchParams();
+  if (q.trim()) params.set('q', q.trim());
+  if (filters.category) params.set('category', filters.category);
+  if (filters.region) params.set('region', filters.region);
+  if (filters.species) params.set('species', filters.species);
+  if (filters.limit) params.set('limit', String(filters.limit));
 
+  const query = params.toString();
   return request<Product[]>(
-    `/catalog/products${query}`,
+    `/catalog/products${query ? `?${query}` : ''}`,
   );
+}
+
+export function getProduct(
+  productId: string,
+): Promise<Product> {
+  return request<Product>(`/catalog/products/${productId}`);
+}
+
+export function compareProducts(
+  productIds: string[],
+): Promise<Product[]> {
+  return request<Product[]>('/catalog/compare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_ids: productIds }),
+  });
+}
+
+export function getProductOffers(
+  productId: string,
+): Promise<ProductOffer[]> {
+  return request<ProductOffer[]>(
+    `/catalog/products/${productId}/offers`,
+  );
+}
+
+export function getWardrobe(
+  token: string,
+): Promise<WardrobeItem[]> {
+  return request<WardrobeItem[]>('/wardrobe', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function createWardrobeItem(
+  token: string,
+  payload: WardrobeItemCreatePayload,
+): Promise<WardrobeItem> {
+  return request<WardrobeItem>('/wardrobe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteWardrobeItem(
+  token: string,
+  itemId: string,
+): Promise<void> {
+  return request<void>(`/wardrobe/${itemId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export function getDeals(): Promise<Deal[]> {
   return request<Deal[]>('/deals');
 }
 
+export function createDeal(
+  token: string,
+  payload: DealCreatePayload,
+): Promise<Deal> {
+  return request<Deal>('/deals', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function validateDeal(
+  token: string,
+  dealId: string,
+  status: OfferValidationStatus,
+): Promise<Deal> {
+  return request<Deal>(`/deals/${dealId}/validate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+}
+
 /* =========================================================
-   CLIMA / CONTEXTO / SOLUNAR
+   CLIMA / CONTEXTO / SOLUNAR / UBICACIONES
 ========================================================= */
+
+export function searchOutdoorLocations(
+  query: string,
+  limit = 6,
+): Promise<ExploreLocation[]> {
+  return request<ExploreLocation[]>(
+    `/environment/locations/search?q=${encodeURIComponent(query)}` +
+      `&limit=${limit}`,
+  );
+}
+
+export function reverseOutdoorLocation(
+  latitude: number,
+  longitude: number,
+): Promise<ExploreLocation> {
+  return request<ExploreLocation>(
+    `/environment/location/reverse` +
+      `?latitude=${latitude}` +
+      `&longitude=${longitude}`,
+  );
+}
 
 export function getWeather(
   latitude: number,
   longitude: number,
+  day?: string,
 ) {
+  const dayQuery = day
+    ? `&day=${encodeURIComponent(day)}`
+    : '';
+
   return request<Record<string, unknown>>(
     `/environment/weather/current` +
       `?latitude=${latitude}` +
-      `&longitude=${longitude}`,
+      `&longitude=${longitude}` +
+      dayQuery,
   );
 }
 
 export function getOutdoorContext(
   latitude: number,
   longitude: number,
+  day?: string,
 ): Promise<OutdoorContext> {
+  const dayQuery = day
+    ? `&day=${encodeURIComponent(day)}`
+    : '';
+
   return request<OutdoorContext>(
     `/environment/context` +
       `?latitude=${latitude}` +
-      `&longitude=${longitude}`,
+      `&longitude=${longitude}` +
+      dayQuery,
   );
 }
 
-export function getSolunar() {
+export function getSolunar(day?: string) {
+  const query = day
+    ? `?day=${encodeURIComponent(day)}`
+    : '';
+
   return request<Record<string, unknown>>(
-    '/environment/solunar',
+    `/environment/solunar${query}`,
   );
 }

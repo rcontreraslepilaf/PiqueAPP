@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,8 +10,15 @@ import {
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
+import { Asset } from 'expo-asset';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { ExplorationBar } from '../components/ExplorationPicker';
+import {
+  formatExplorationDate,
+  isToday,
+  useExploration,
+} from '../context/ExplorationContext';
 
 import {
   getOutdoorContext,
@@ -18,6 +26,9 @@ import {
   getWeather,
   type OutdoorContext,
 } from '../services/api';
+
+const CONDITIONS_VIDEO = require('../../assets/videos/paisaje-condiciones.mp4');
+const CONDITIONS_VIDEO_URI = Asset.fromModule(CONDITIONS_VIDEO).uri;
 
 type WeatherResponse = {
   latitude?: number;
@@ -46,6 +57,18 @@ type WeatherResponse = {
     sunrise?: string[];
     sunset?: string[];
   };
+  selected_day?: {
+    date?: string;
+    weather_code?: number;
+    temperature_2m_max?: number;
+    temperature_2m_min?: number;
+    precipitation_sum?: number;
+    precipitation_probability_max?: number;
+    wind_speed_10m_max?: number;
+    wind_gusts_10m_max?: number;
+    sunrise?: string;
+    sunset?: string;
+  } | null;
 };
 
 type SolunarResponse = {
@@ -62,6 +85,14 @@ export function ConditionsScreen({
 }: {
   onBack: () => void;
 }) {
+  const {
+    mode,
+    place,
+    selectedDate,
+    hydrated,
+    ensureGpsLocation,
+  } = useExploration();
+
   const [loading, setLoading] = useState(true);
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [solunar, setSolunar] = useState<SolunarResponse | null>(null);
@@ -69,23 +100,29 @@ export function ConditionsScreen({
     useState<OutdoorContext | null>(null);
   const [error, setError] = useState('');
 
-  async function loadConditions() {
+  const conditionsVideoPlayer = useVideoPlayer(CONDITIONS_VIDEO, (player) => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
+
+  async function loadConditions(requestPermission = false) {
     setLoading(true);
     setError('');
 
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
+      let target = place;
 
-      if (permission.status !== 'granted') {
+      if (!target && mode === 'gps') {
+        target = await ensureGpsLocation(requestPermission);
+      }
+
+      if (!target) {
         setError(
-          'Necesitamos permiso de ubicación para consultar las condiciones de tu zona.',
+          'Activa tu ubicación o elige manualmente una zona para consultar las condiciones.',
         );
         return;
       }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
 
       const [
         weatherResult,
@@ -93,13 +130,15 @@ export function ConditionsScreen({
         contextResult,
       ] = await Promise.all([
         getWeather(
-          position.coords.latitude,
-          position.coords.longitude,
+          target.latitude,
+          target.longitude,
+          selectedDate,
         ),
-        getSolunar(),
+        getSolunar(selectedDate),
         getOutdoorContext(
-          position.coords.latitude,
-          position.coords.longitude,
+          target.latitude,
+          target.longitude,
+          selectedDate,
         ),
       ]);
 
@@ -118,8 +157,15 @@ export function ConditionsScreen({
   }
 
   useEffect(() => {
-    loadConditions();
-  }, []);
+    if (!hydrated) return;
+    void loadConditions(false);
+  }, [
+    hydrated,
+    mode,
+    place?.latitude,
+    place?.longitude,
+    selectedDate,
+  ]);
 
   const activityLabel = useMemo(() => {
     const score = solunar?.activity_index ?? 0;
@@ -130,8 +176,21 @@ export function ConditionsScreen({
     return 'Baja';
   }, [solunar]);
 
+  const solunarGuidance = useMemo(
+    () =>
+      getSolunarGuidance(
+        solunar?.activity_index ?? 0,
+        solunar?.phase_name ?? 'Fase lunar',
+      ),
+    [solunar?.activity_index, solunar?.phase_name],
+  );
+
   const current = weather?.current;
   const units = weather?.current_units;
+  const planned = weather?.selected_day;
+  const future = !isToday(selectedDate);
+
+  const hasWeather = future ? Boolean(planned) : Boolean(current);
 
   return (
     <ScrollView
@@ -157,7 +216,11 @@ export function ConditionsScreen({
 
           <View style={styles.topTitle}>
             <Text style={styles.eyebrow}>PESCA & OUTDOOR</Text>
-            <Text style={styles.title}>Condiciones de hoy</Text>
+            <Text style={styles.title}>
+              {isToday(selectedDate)
+                ? 'Condiciones de hoy'
+                : `Condiciones · ${formatExplorationDate(selectedDate)}`}
+            </Text>
           </View>
 
           <Pressable
@@ -165,7 +228,7 @@ export function ConditionsScreen({
               styles.refreshButton,
               pressed && styles.pressed,
             ]}
-            onPress={loadConditions}
+            onPress={() => void loadConditions(false)}
           >
             <Ionicons
               name="refresh"
@@ -175,15 +238,16 @@ export function ConditionsScreen({
           </Pressable>
         </View>
 
+        <ExplorationBar />
+
         {loading ? (
           <View style={styles.stateCard}>
             <ActivityIndicator size="large" color="#D9A441" />
             <Text style={styles.stateTitle}>
-              Consultando tu ubicación y el clima…
+              Consultando la zona y las condiciones…
             </Text>
             <Text style={styles.stateText}>
-              La primera vez el navegador o el teléfono te pedirá permiso para
-              usar tu ubicación.
+              Puedes usar el GPS del dispositivo o una localidad elegida manualmente.
             </Text>
           </View>
         ) : null}
@@ -205,23 +269,66 @@ export function ConditionsScreen({
                 styles.retryButton,
                 pressed && styles.pressed,
               ]}
-              onPress={loadConditions}
+              onPress={() => void loadConditions(true)}
             >
               <Text style={styles.retryText}>Intentar nuevamente</Text>
             </Pressable>
           </View>
         ) : null}
 
-        {!loading && !error && current ? (
+        {!loading && !error && !hasWeather ? (
+          <View style={styles.stateCard}>
+            <Ionicons
+              name="calendar-outline"
+              size={32}
+              color="#315D49"
+            />
+            <Text style={styles.stateTitle}>
+              Pronóstico todavía no disponible
+            </Text>
+            <Text style={styles.stateText}>
+              Para fechas más lejanas podemos mostrar temporadas y solunar, pero el pronóstico meteorológico solo está disponible dentro de la ventana que entrega el proveedor.
+            </Text>
+          </View>
+        ) : null}
+
+        {!loading && !error && hasWeather ? (
           <>
-            <LinearGradient
-              colors={['#163F2F', '#0B261C']}
-              style={styles.hero}
-            >
+            <View style={styles.hero}>
+              {Platform.OS === 'web' ? (
+                <video
+                  src={CONDITIONS_VIDEO_URI}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                  style={webHeroVideoStyle}
+                />
+              ) : (
+                <VideoView
+                  player={conditionsVideoPlayer}
+                  style={styles.heroVideo}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+              )}
+
+              <LinearGradient
+                colors={[
+                  'rgba(4,22,17,0.20)',
+                  'rgba(4,22,17,0.82)',
+                ]}
+                style={styles.heroOverlay}
+              />
+
+              <View style={styles.heroContent}>
               <View style={styles.heroHeader}>
                 <View style={styles.heroHeading}>
                   <Text style={styles.heroEyebrow}>
-                    UBICACIÓN APROXIMADA
+                    {mode === 'manual'
+                      ? 'ZONA SELECCIONADA'
+                      : 'UBICACIÓN APROXIMADA'}
                   </Text>
 
                   <View style={styles.locationLine}>
@@ -257,96 +364,214 @@ export function ConditionsScreen({
               <View style={styles.heroMetrics}>
                 <Metric
                   icon="thermometer-outline"
-                  label="Temperatura"
+                  label={future ? 'Temp. máxima' : 'Temperatura'}
                   value={formatValue(
-                    current.temperature_2m,
-                    units?.temperature_2m ?? '°C',
+                    future
+                      ? planned?.temperature_2m_max
+                      : current?.temperature_2m,
+                    '°C',
                   )}
                 />
 
                 <Metric
                   icon="navigate-outline"
-                  label="Viento"
+                  label={future ? 'Viento máximo' : 'Viento'}
                   value={formatValue(
-                    current.wind_speed_10m,
-                    units?.wind_speed_10m ?? 'km/h',
+                    future
+                      ? planned?.wind_speed_10m_max
+                      : current?.wind_speed_10m,
+                    'km/h',
                   )}
                 />
 
                 <Metric
-                  icon="water-outline"
-                  label="Humedad"
+                  icon={future ? 'rainy-outline' : 'water-outline'}
+                  label={future ? 'Prob. lluvia' : 'Humedad'}
                   value={formatValue(
-                    current.relative_humidity_2m,
-                    units?.relative_humidity_2m ?? '%',
+                    future
+                      ? planned?.precipitation_probability_max
+                      : current?.relative_humidity_2m,
+                    '%',
                   )}
                 />
               </View>
-            </LinearGradient>
+              </View>
+            </View>
 
-            <Text style={styles.sectionTitle}>Condiciones actuales</Text>
+            <Text style={styles.sectionTitle}>
+              {future
+                ? `Pronóstico para ${formatExplorationDate(selectedDate)}`
+                : 'Condiciones actuales'}
+            </Text>
 
             <View style={styles.grid}>
-              <ConditionCard
-                icon="thermometer-outline"
-                title="Sensación"
-                value={formatValue(
-                  current.apparent_temperature,
-                  units?.apparent_temperature ?? '°C',
-                )}
-              />
-
-              <ConditionCard
-                icon="rainy-outline"
-                title="Precipitación"
-                value={formatValue(
-                  current.precipitation,
-                  units?.precipitation ?? 'mm',
-                )}
-              />
-
-              <ConditionCard
-                icon="speedometer-outline"
-                title="Presión"
-                value={formatValue(
-                  current.pressure_msl,
-                  units?.pressure_msl ?? 'hPa',
-                )}
-              />
-
-              <ConditionCard
-                icon="flag-outline"
-                title="Ráfagas"
-                value={formatValue(
-                  current.wind_gusts_10m,
-                  units?.wind_gusts_10m ?? 'km/h',
-                )}
-              />
+              {future ? (
+                <>
+                  <ConditionCard
+                    icon="thermometer-outline"
+                    title="Temperatura mínima"
+                    value={formatValue(planned?.temperature_2m_min, '°C')}
+                  />
+                  <ConditionCard
+                    icon="rainy-outline"
+                    title="Precipitación total"
+                    value={formatValue(planned?.precipitation_sum, 'mm')}
+                  />
+                  <ConditionCard
+                    icon="umbrella-outline"
+                    title="Probabilidad de lluvia"
+                    value={formatValue(
+                      planned?.precipitation_probability_max,
+                      '%',
+                    )}
+                  />
+                  <ConditionCard
+                    icon="flag-outline"
+                    title="Ráfagas máximas"
+                    value={formatValue(planned?.wind_gusts_10m_max, 'km/h')}
+                  />
+                </>
+              ) : (
+                <>
+                  <ConditionCard
+                    icon="thermometer-outline"
+                    title="Sensación"
+                    value={formatValue(
+                      current?.apparent_temperature,
+                      units?.apparent_temperature ?? '°C',
+                    )}
+                  />
+                  <ConditionCard
+                    icon="rainy-outline"
+                    title="Precipitación"
+                    value={formatValue(
+                      current?.precipitation,
+                      units?.precipitation ?? 'mm',
+                    )}
+                  />
+                  <ConditionCard
+                    icon="speedometer-outline"
+                    title="Presión"
+                    value={formatValue(
+                      current?.pressure_msl,
+                      units?.pressure_msl ?? 'hPa',
+                    )}
+                  />
+                  <ConditionCard
+                    icon="flag-outline"
+                    title="Ráfagas"
+                    value={formatValue(
+                      current?.wind_gusts_10m,
+                      units?.wind_gusts_10m ?? 'km/h',
+                    )}
+                  />
+                </>
+              )}
             </View>
 
             <Text style={styles.sectionTitle}>Solunar</Text>
 
             <View style={styles.solunarCard}>
-              <View style={styles.moonIcon}>
-                <Ionicons
-                  name="moon-outline"
-                  size={30}
-                  color="#D9A441"
+              <View style={styles.solunarTop}>
+                <View style={styles.moonIcon}>
+                  <Ionicons
+                    name="moon-outline"
+                    size={30}
+                    color="#D9A441"
+                  />
+                </View>
+
+                <View style={styles.solunarContent}>
+                  <Text style={styles.solunarPhase}>
+                    {solunar?.phase_name ?? 'Fase lunar'}
+                  </Text>
+                  <Text style={styles.solunarDetail}>
+                    Iluminación aproximada:{' '}
+                    {typeof solunar?.moon_illumination === 'number'
+                      ? `${Math.round(solunar.moon_illumination * 100)}%`
+                      : '—'}
+                  </Text>
+                  <Text style={styles.solunarDetail}>
+                    Índice de actividad: {solunar?.activity_index ?? '—'}/100
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.fishingStatusBadge,
+                    { backgroundColor: solunarGuidance.badgeBackground },
+                  ]}
+                >
+                  <Ionicons
+                    name="fish-outline"
+                    size={17}
+                    color={solunarGuidance.badgeColor}
+                  />
+                  <Text
+                    style={[
+                      styles.fishingStatusText,
+                      { color: solunarGuidance.badgeColor },
+                    ]}
+                  >
+                    Pesca: {solunarGuidance.label}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.solunarProgressTrack}>
+                <View
+                  style={[
+                    styles.solunarProgressFill,
+                    {
+                      width: `${Math.max(
+                        0,
+                        Math.min(100, solunar?.activity_index ?? 0),
+                      )}%`,
+                    },
+                  ]}
                 />
               </View>
 
-              <View style={styles.solunarContent}>
-                <Text style={styles.solunarPhase}>
-                  {solunar?.phase_name ?? 'Fase lunar'}
-                </Text>
-                <Text style={styles.solunarDetail}>
-                  Iluminación aproximada:{' '}
-                  {typeof solunar?.moon_illumination === 'number'
-                    ? `${Math.round(solunar.moon_illumination * 100)}%`
-                    : '—'}
-                </Text>
-                <Text style={styles.solunarDetail}>
-                  Índice de actividad: {solunar?.activity_index ?? '—'}/100
+              <Text style={styles.solunarExplanation}>
+                {solunarGuidance.summary}
+              </Text>
+
+              <View style={styles.solunarTipsGrid}>
+                <View style={styles.solunarTip}>
+                  <View style={styles.solunarTipIcon}>
+                    <Ionicons name="time-outline" size={19} color="#315D49" />
+                  </View>
+                  <View style={styles.solunarTipContent}>
+                    <Text style={styles.solunarTipTitle}>Cuándo probar</Text>
+                    <Text style={styles.solunarTipText}>
+                      {solunarGuidance.when}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.solunarTip}>
+                  <View style={styles.solunarTipIcon}>
+                    <Ionicons name="location-outline" size={19} color="#315D49" />
+                  </View>
+                  <View style={styles.solunarTipContent}>
+                    <Text style={styles.solunarTipTitle}>Dónde probar</Text>
+                    <Text style={styles.solunarTipText}>
+                      {solunarGuidance.where}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.solunarNotice}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={17}
+                  color="#6D7A72"
+                />
+                <Text style={styles.solunarNoticeText}>
+                  La fase lunar y el índice solunar son orientativos. No
+                  garantizan capturas; conviene combinarlos con clima,
+                  temperatura, viento y experiencia local.
                 </Text>
               </View>
             </View>
@@ -359,12 +584,14 @@ export function ConditionsScreen({
               />
               <View style={styles.privacyContent}>
                 <Text style={styles.privacyTitle}>
-                  Tu ubicación exacta no se publica
+                  {mode === 'manual'
+                    ? 'Estás explorando una zona manual'
+                    : 'Tu ubicación exacta no se publica'}
                 </Text>
                 <Text style={styles.privacyText}>
-                  La usamos en esta consulta para obtener condiciones locales.
-                  No la estamos mostrando en esta pantalla ni compartiendo con
-                  otros usuarios.
+                  {mode === 'manual'
+                    ? 'Esta consulta usa el centro aproximado de la localidad elegida. No modifica la ubicación real de tus capturas o spots.'
+                    : 'La usamos en esta consulta para obtener condiciones locales. No la mostramos ni la compartimos con otros usuarios.'}
                 </Text>
               </View>
             </View>
@@ -374,7 +601,7 @@ export function ConditionsScreen({
               Outdoor. La ubicación mostrada es aproximada (
               {outdoorContext?.location.provider ??
                 'proveedor de geocodificación'}
-              ) y el índice solunar es heurístico y orientativo.
+              ) · consulta {formatExplorationDate(selectedDate)} · el índice solunar es heurístico y orientativo.
             </Text>
           </>
         ) : null}
@@ -423,6 +650,59 @@ function ConditionCard({
   );
 }
 
+
+function getSolunarGuidance(score: number, phaseName: string) {
+  if (score >= 75) {
+    return {
+      label: 'Muy favorable',
+      badgeColor: '#17603A',
+      badgeBackground: '#DDF0E3',
+      summary: `El índice está alto (${score}/100). ${phaseName} forma parte del cálculo y, junto con las condiciones ambientales, sugiere una ventana interesante para planificar una salida.`,
+      when:
+        'Prioriza amanecer y atardecer, especialmente con viento y temperatura estables.',
+      where:
+        'Busca entradas y salidas de corriente, cambios de profundidad, estructuras sumergidas y bordes con vegetación o sombra.',
+    };
+  }
+
+  if (score >= 60) {
+    return {
+      label: 'Favorable',
+      badgeColor: '#276342',
+      badgeBackground: '#E3F0E6',
+      summary: `El índice está en un rango favorable (${score}/100). ${phaseName} aporta al cálculo, pero conviene leerlo junto con las condiciones reales del agua.`,
+      when:
+        'Amanecer y atardecer son buenos puntos de partida. Observa viento, nubosidad y temperatura.',
+      where:
+        'Prueba sectores con corriente moderada, desembocaduras, orillas con cobertura y cambios de profundidad.',
+    };
+  }
+
+  if (score >= 45) {
+    return {
+      label: 'Moderada',
+      badgeColor: '#8B6118',
+      badgeBackground: '#F5EACF',
+      summary: `El índice está en un rango moderado (${score}/100). No es una señal negativa: conviene elegir mejor el horario y el sector, y apoyarse más en las condiciones del agua.`,
+      when:
+        'Da prioridad al amanecer o al atardecer y observa viento, temperatura y actividad visible.',
+      where:
+        'Concentra los intentos en pozones, remansos, entradas o salidas de corriente, cambios de profundidad y zonas con refugio.',
+    };
+  }
+
+  return {
+    label: 'Baja',
+    badgeColor: '#8C453A',
+    badgeBackground: '#F7E5E1',
+    summary: `El índice está bajo (${score}/100). Eso no significa que no puedas pescar, pero la señal solunar es menos favorable y conviene apoyarse más en clima, técnica y conocimiento del lugar.`,
+    when:
+      'Busca las horas con mejores condiciones ambientales, especialmente amanecer o atardecer.',
+    where:
+      'Prioriza pozones, estructuras, sombra, vegetación, cambios de corriente y zonas de refugio.',
+  };
+}
+
 function formatValue(
   value: number | undefined,
   unit: string,
@@ -430,6 +710,21 @@ function formatValue(
   if (typeof value !== 'number') return '—';
   return `${Math.round(value * 10) / 10} ${unit}`;
 }
+
+
+const webHeroVideoStyle = {
+  position: 'absolute' as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover' as const,
+  display: 'block',
+  borderRadius: 28,
+  pointerEvents: 'none' as const,
+};
 
 const styles = StyleSheet.create({
   screen: {
@@ -540,7 +835,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   hero: {
+    minHeight: 270,
     borderRadius: 28,
+    overflow: 'hidden',
+    position: 'relative',
+    justifyContent: 'center',
+    backgroundColor: '#0B261C',
+  },
+  heroVideo: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroContent: {
+    position: 'relative',
     padding: 26,
   },
   heroHeader: {
@@ -667,6 +976,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 20,
+    gap: 16,
+  },
+  solunarTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 15,

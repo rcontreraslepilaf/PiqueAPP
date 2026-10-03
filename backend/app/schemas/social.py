@@ -4,6 +4,14 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class FeedEquipmentRead(BaseModel):
+    id: UUID
+    category: str
+    brand: str | None
+    model: str | None
+    name: str
+
+
 class FeedItemRead(BaseModel):
     id: UUID
     user_id: UUID
@@ -22,6 +30,7 @@ class FeedItemRead(BaseModel):
     like_count: int
     comment_count: int
     liked_by_me: bool
+    equipment: list[FeedEquipmentRead] = []
 
 
 class LikeStateRead(BaseModel):

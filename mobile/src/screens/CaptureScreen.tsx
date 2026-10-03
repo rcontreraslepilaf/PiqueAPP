@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -18,8 +18,10 @@ import * as Location from 'expo-location';
 import {
   createTrophy,
   getOutdoorContext,
+  getWardrobe,
   uploadTrophyImage,
 } from '../services/api';
+import type { WardrobeItem } from '../types/api';
 
 type ReleaseStatus = 'released' | 'kept';
 type Visibility = 'public' | 'private';
@@ -55,6 +57,38 @@ export function CaptureScreen({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [success, setSuccess] = useState(false);
+  const [wardrobe, setWardrobe] = useState<WardrobeItem[]>([]);
+  const [gearLoading, setGearLoading] = useState(true);
+  const [selectedEquipmentIds, setSelectedEquipmentIds] =
+    useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    setGearLoading(true);
+
+    getWardrobe(token)
+      .then((items) => {
+        if (active) setWardrobe(items);
+      })
+      .catch(() => {
+        if (active) setWardrobe([]);
+      })
+      .finally(() => {
+        if (active) setGearLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  function toggleEquipment(itemId: string) {
+    setSelectedEquipmentIds((current) =>
+      current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId],
+    );
+  }
 
   async function pickImage() {
     setMessage('');
@@ -207,7 +241,7 @@ export function CaptureScreen({
           longitude,
           public_region: publicRegion,
           environmental_snapshot: null,
-          equipment_ids: [],
+          equipment_ids: selectedEquipmentIds,
         },
       );
 
@@ -245,6 +279,7 @@ export function CaptureScreen({
       setReleaseStatus('released');
       setVisibility('public');
       setGeoPrivacy('region_only');
+      setSelectedEquipmentIds([]);
       setSuccess(true);
       setMessage(
         'Captura guardada correctamente. Ya está disponible en tu muro.',
@@ -409,6 +444,70 @@ export function CaptureScreen({
               onPress={() => setReleaseStatus('kept')}
             />
           </View>
+        </View>
+
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>
+            Equipo utilizado
+          </Text>
+          <Text style={styles.gearHelp}>
+            Selecciona los elementos de Mi equipo que usaste en esta captura.
+          </Text>
+
+          {gearLoading ? (
+            <View style={styles.gearLoading}>
+              <ActivityIndicator size="small" color="#D9A441" />
+              <Text style={styles.gearHelp}>Cargando tu equipo…</Text>
+            </View>
+          ) : null}
+
+          {!gearLoading && wardrobe.length === 0 ? (
+            <View style={styles.gearEmpty}>
+              <Ionicons
+                name="bag-handle-outline"
+                size={22}
+                color="#315D49"
+              />
+              <Text style={styles.gearEmptyText}>
+                Aún no tienes elementos en Mi equipo. Agrégalos desde la pestaña Equipos.
+              </Text>
+            </View>
+          ) : null}
+
+          {wardrobe.length > 0 ? (
+            <View style={styles.gearGrid}>
+              {wardrobe.map((item) => {
+                const active = selectedEquipmentIds.includes(item.id);
+                return (
+                  <Pressable
+                    key={item.id}
+                    style={[styles.gearChip, active && styles.gearChipActive]}
+                    onPress={() => toggleEquipment(item.id)}
+                  >
+                    <Ionicons
+                      name={active ? 'checkmark-circle' : 'ellipse-outline'}
+                      size={17}
+                      color={active ? '#10261C' : '#617068'}
+                    />
+                    <View style={styles.gearChipText}>
+                      <Text style={[styles.gearName, active && styles.gearNameActive]}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.gearMeta}>
+                        {[item.brand, item.model].filter(Boolean).join(' · ') || item.category}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {selectedEquipmentIds.length > 0 ? (
+            <Text style={styles.gearSelected}>
+              {selectedEquipmentIds.length} elemento{selectedEquipmentIds.length === 1 ? '' : 's'} asociado{selectedEquipmentIds.length === 1 ? '' : 's'} a esta captura.
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.formCard}>
@@ -888,6 +987,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 3,
+  },
+  gearHelp: {
+    color: '#6B7971',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  gearLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  gearEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: '#E3ECE6',
+    borderRadius: 14,
+    padding: 12,
+  },
+  gearEmptyText: {
+    flex: 1,
+    color: '#5B7164',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  gearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  gearChip: {
+    minWidth: 210,
+    flexGrow: 1,
+    flexBasis: 250,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 13,
+    paddingHorizontal: 11,
+    backgroundColor: '#F2F3EF',
+    borderWidth: 1,
+    borderColor: '#E0E4E0',
+  },
+  gearChipActive: {
+    backgroundColor: '#E7C67E',
+    borderColor: '#D9A441',
+  },
+  gearChipText: {
+    flex: 1,
+  },
+  gearName: {
+    color: '#40564A',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  gearNameActive: {
+    color: '#10261C',
+  },
+  gearMeta: {
+    color: '#7A857E',
+    fontSize: 10,
+    marginTop: 1,
+  },
+  gearSelected: {
+    color: '#315D49',
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 10,
   },
   privacyNote: {
     marginTop: 8,

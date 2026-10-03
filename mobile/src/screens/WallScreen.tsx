@@ -17,6 +17,7 @@ import {
   addTrophyComment,
   getFeed,
   getTrophyComments,
+  deleteTrophy,
   getTrophyImageDataUrl,
   toggleTrophyLike,
 } from '../services/api';
@@ -26,6 +27,8 @@ import type {
 } from '../types/api';
 
 const PUBLIC_WEB_URL = 'https://pescaoutdoor.cl';
+
+type FeedScope = 'community' | 'mine';
 
 export function WallScreen({
   token,
@@ -37,6 +40,11 @@ export function WallScreen({
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [scope, setScope] = useState<FeedScope>('community');
+  const [deleteConfirmId, setDeleteConfirmId] =
+    useState<string | null>(null);
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
   const [openCommentsId, setOpenCommentsId] =
     useState<string | null>(null);
   const [comments, setComments] =
@@ -59,7 +67,7 @@ export function WallScreen({
     setMessage('');
 
     try {
-      setItems(await getFeed(token));
+      setItems(await getFeed(token, scope === 'mine'));
     } catch (err) {
       setMessage(
         err instanceof Error
@@ -73,7 +81,7 @@ export function WallScreen({
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [token, scope]);
 
   async function like(item: FeedItem) {
     try {
@@ -180,6 +188,44 @@ export function WallScreen({
     }
   }
 
+  async function removeOwnCapture(item: FeedItem) {
+    if (scope !== 'mine') return;
+
+    if (deleteConfirmId !== item.id) {
+      setDeleteConfirmId(item.id);
+      setMessage('Pulsa nuevamente Eliminar para confirmar.');
+      return;
+    }
+
+    setDeletingId(item.id);
+    setMessage('');
+
+    try {
+      await deleteTrophy(token, item.id);
+      setItems((current) =>
+        current.filter((candidate) => candidate.id !== item.id),
+      );
+      setComments((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      if (openCommentsId === item.id) {
+        setOpenCommentsId(null);
+      }
+      setDeleteConfirmId(null);
+      setMessage('Captura eliminada correctamente.');
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo eliminar la captura.',
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function share(item: FeedItem) {
     setShareTarget({
       title: `${item.species_name} · ${item.title}`,
@@ -247,6 +293,58 @@ export function WallScreen({
             </Text>
           </View>
 
+          <View style={styles.scopeRow}>
+            <Pressable
+              style={[
+                styles.scopeChip,
+                scope === 'community' && styles.scopeChipActive,
+              ]}
+              onPress={() => {
+                setDeleteConfirmId(null);
+                setScope('community');
+              }}
+            >
+              <Ionicons
+                name="people-outline"
+                size={17}
+                color={scope === 'community' ? '#10261C' : '#526159'}
+              />
+              <Text
+                style={[
+                  styles.scopeChipText,
+                  scope === 'community' && styles.scopeChipTextActive,
+                ]}
+              >
+                Comunidad
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.scopeChip,
+                scope === 'mine' && styles.scopeChipActive,
+              ]}
+              onPress={() => {
+                setDeleteConfirmId(null);
+                setScope('mine');
+              }}
+            >
+              <Ionicons
+                name="person-outline"
+                size={17}
+                color={scope === 'mine' ? '#10261C' : '#526159'}
+              />
+              <Text
+                style={[
+                  styles.scopeChipText,
+                  scope === 'mine' && styles.scopeChipTextActive,
+                ]}
+              >
+                Mis capturas
+              </Text>
+            </Pressable>
+          </View>
+
           {message ? (
             <View style={styles.messageCard}>
               <Text style={styles.messageText}>
@@ -275,10 +373,14 @@ export function WallScreen({
                 color="#315D49"
               />
               <Text style={styles.emptyTitle}>
-                Aún no hay capturas publicadas
+                {scope === 'mine'
+                  ? 'Aún no tienes capturas'
+                  : 'Aún no hay capturas publicadas'}
               </Text>
               <Text style={styles.emptyText}>
-                Registra la primera desde el botón Captura.
+                {scope === 'mine'
+                  ? 'Tus capturas guardadas aparecerán aquí.'
+                  : 'Registra la primera desde el botón Captura.'}
               </Text>
             </View>
           ) : null}
@@ -355,6 +457,52 @@ export function WallScreen({
                   </Text>
                 ) : null}
 
+                {item.equipment.length > 0 ? (
+                  <View style={styles.equipmentBlock}>
+                    <View style={styles.equipmentHeader}>
+                      <Ionicons
+                        name="bag-handle-outline"
+                        size={17}
+                        color="#315D49"
+                      />
+                      <Text style={styles.equipmentTitle}>
+                        Equipo utilizado
+                      </Text>
+                    </View>
+
+                    <View style={styles.equipmentList}>
+                      {item.equipment.map((equipment) => (
+                        <View
+                          key={equipment.id}
+                          style={styles.equipmentChip}
+                        >
+                          <Ionicons
+                            name={equipmentIcon(equipment.category)}
+                            size={15}
+                            color="#A3652E"
+                          />
+                          <View style={styles.equipmentChipText}>
+                            <Text
+                              style={styles.equipmentName}
+                              numberOfLines={1}
+                            >
+                              {equipment.name}
+                            </Text>
+                            <Text
+                              style={styles.equipmentMeta}
+                              numberOfLines={1}
+                            >
+                              {[equipment.brand, equipment.model]
+                                .filter(Boolean)
+                                .join(' · ') || equipment.category}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
                 <View style={styles.socialRow}>
                   <Pressable
                     style={styles.socialButton}
@@ -407,6 +555,37 @@ export function WallScreen({
                       Compartir
                     </Text>
                   </Pressable>
+
+
+                  {scope === 'mine' ? (
+                    <Pressable
+                      style={[
+                        styles.deleteCaptureButton,
+                        deleteConfirmId === item.id &&
+                          styles.deleteCaptureButtonConfirm,
+                      ]}
+                      disabled={deletingId === item.id}
+                      onPress={() => void removeOwnCapture(item)}
+                    >
+                      {deletingId === item.id ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#9B463A"
+                        />
+                      ) : (
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color="#9B463A"
+                        />
+                      )}
+                      <Text style={styles.deleteCaptureText}>
+                        {deleteConfirmId === item.id
+                          ? 'Confirmar eliminar'
+                          : 'Eliminar'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
 
                 {openCommentsId === item.id ? (
@@ -579,6 +758,22 @@ function Metric({
   );
 }
 
+function equipmentIcon(
+  category: string,
+): keyof typeof Ionicons.glyphMap {
+  const normalized = category.toLowerCase();
+
+  if (normalized.includes('caña')) return 'remove-outline';
+  if (normalized.includes('carrete')) return 'sync-outline';
+  if (normalized.includes('señuelo')) return 'fish-outline';
+  if (normalized.includes('ropa')) return 'shirt-outline';
+  if (normalized.includes('línea') || normalized.includes('linea')) {
+    return 'analytics-outline';
+  }
+
+  return 'bag-handle-outline';
+}
+
 function initials(value: string) {
   const parts = value
     .trim()
@@ -674,6 +869,36 @@ const styles = StyleSheet.create({
     color: '#557064',
     fontSize: 12,
     lineHeight: 18,
+  },
+  scopeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  scopeChip: {
+    minHeight: 41,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 13,
+    backgroundColor: '#EEF1ED',
+    borderWidth: 1,
+    borderColor: '#E0E4E0',
+  },
+  scopeChipActive: {
+    backgroundColor: '#E7C67E',
+    borderColor: '#D9A441',
+  },
+  scopeChipText: {
+    color: '#526159',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  scopeChipTextActive: {
+    color: '#10261C',
+    fontWeight: '900',
   },
   messageCard: {
     backgroundColor: '#F5E9D9',
@@ -819,6 +1044,56 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 12,
   },
+  equipmentBlock: {
+    marginTop: 14,
+    borderRadius: 15,
+    backgroundColor: '#F7F4EA',
+    padding: 12,
+  },
+  equipmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 9,
+  },
+  equipmentTitle: {
+    color: '#2C4638',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  equipmentList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  equipmentChip: {
+    minWidth: 175,
+    flexGrow: 1,
+    flexBasis: 220,
+    maxWidth: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E0DED4',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  equipmentChipText: {
+    flex: 1,
+  },
+  equipmentName: {
+    color: '#21352A',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  equipmentMeta: {
+    color: '#7B867F',
+    fontSize: 9,
+    marginTop: 1,
+  },
   socialRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -839,6 +1114,24 @@ const styles = StyleSheet.create({
     color: '#526159',
     fontSize: 12,
     fontWeight: '700',
+  },
+  deleteCaptureButton: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+    backgroundColor: '#F7E5E1',
+  },
+  deleteCaptureButtonConfirm: {
+    borderWidth: 1,
+    borderColor: '#C76A5B',
+  },
+  deleteCaptureText: {
+    color: '#9B463A',
+    fontSize: 11,
+    fontWeight: '900',
   },
   commentsArea: {
     marginTop: 10,

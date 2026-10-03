@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
+import { ExplorationBar } from '../components/ExplorationPicker';
+import { OpenStreetMap } from '../components/OpenStreetMap';
+import { useExploration } from '../context/ExplorationContext';
 import {
   createSpot,
   deleteSpot,
@@ -34,6 +36,8 @@ export function MapScreen({
 }: {
   token: string;
 }) {
+  const { place } = useExploration();
+
   const [spots, setSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -200,14 +204,18 @@ export function MapScreen({
           </Pressable>
         </View>
 
+        <ExplorationBar />
+
         <View style={styles.mapCard}>
           <View style={styles.mapHeading}>
             <View>
               <Text style={styles.mapTitle}>
-                Vista geográfica básica
+                Zona explorada y spots
               </Text>
               <Text style={styles.mapSubtitle}>
-                Los marcadores se dibujan solo cuando existe una coordenada visible.
+                {place
+                  ? `Referencia: ${place.label}`
+                  : 'Selecciona una zona para usarla como referencia de exploración.'}
               </Text>
             </View>
             <Pressable
@@ -222,13 +230,17 @@ export function MapScreen({
             </Pressable>
           </View>
 
-          <SpotMapPreview spots={mappableSpots} />
+          <OpenStreetMap
+            spots={mappableSpots}
+            focusLocation={place}
+          />
 
           <View style={styles.mapLegend}>
             <Legend color="#D9A441" text="Mis spots" />
             <Legend color="#315D49" text="Comunidad" />
+            <Legend color="#315D78" text="Zona explorada" />
             <Text style={styles.mapNote}>
-              Esta versión usa PostGIS para guardar y proteger coordenadas. Más adelante puede conectarse a cartografía con tiles reales.
+              La zona explorada sirve para planificar. Guardar un spot sigue usando el GPS real del dispositivo. Los marcadores públicos respetan la precisión definida por cada usuario.
             </Text>
           </View>
         </View>
@@ -487,134 +499,6 @@ export function MapScreen({
   );
 }
 
-function SpotMapPreview({
-  spots,
-}: {
-  spots: Spot[];
-}) {
-  const [size, setSize] = useState({
-    width: 0,
-    height: 300,
-  });
-
-  const bounds = useMemo(() => {
-    if (spots.length === 0) return null;
-
-    const latitudes = spots
-      .map((item) => item.latitude)
-      .filter((value): value is number =>
-        typeof value === 'number',
-      );
-    const longitudes = spots
-      .map((item) => item.longitude)
-      .filter((value): value is number =>
-        typeof value === 'number',
-      );
-
-    if (
-      latitudes.length === 0 ||
-      longitudes.length === 0
-    ) {
-      return null;
-    }
-
-    const minLat = Math.min(...latitudes);
-    const maxLat = Math.max(...latitudes);
-    const minLon = Math.min(...longitudes);
-    const maxLon = Math.max(...longitudes);
-
-    return {
-      minLat,
-      maxLat,
-      minLon,
-      maxLon,
-    };
-  }, [spots]);
-
-  return (
-    <View
-      style={styles.mapPreview}
-      onLayout={(event: LayoutChangeEvent) => {
-        setSize({
-          width: event.nativeEvent.layout.width,
-          height: event.nativeEvent.layout.height,
-        });
-      }}
-    >
-      <View style={styles.gridLineH1} />
-      <View style={styles.gridLineH2} />
-      <View style={styles.gridLineV1} />
-      <View style={styles.gridLineV2} />
-
-      {spots.length === 0 ? (
-        <View style={styles.mapEmpty}>
-          <Ionicons
-            name="compass-outline"
-            size={38}
-            color="#6A8477"
-          />
-          <Text style={styles.mapEmptyText}>
-            Los spots con coordenadas visibles aparecerán aquí.
-          </Text>
-        </View>
-      ) : null}
-
-      {bounds
-        ? spots.map((spot) => {
-            if (
-              typeof spot.latitude !== 'number' ||
-              typeof spot.longitude !== 'number'
-            ) {
-              return null;
-            }
-
-            const latRange =
-              bounds.maxLat - bounds.minLat || 0.01;
-            const lonRange =
-              bounds.maxLon - bounds.minLon || 0.01;
-
-            const x =
-              (spot.longitude - bounds.minLon) /
-              lonRange;
-            const y =
-              1 -
-              (spot.latitude - bounds.minLat) /
-                latRange;
-
-            const left =
-              14 +
-              x * Math.max(size.width - 42, 0);
-            const top =
-              14 +
-              y * Math.max(size.height - 42, 0);
-
-            return (
-              <View
-                key={spot.id}
-                style={[
-                  styles.mapMarker,
-                  {
-                    left,
-                    top,
-                    backgroundColor: spot.is_owner
-                      ? '#D9A441'
-                      : '#315D49',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="location"
-                  size={16}
-                  color="#FFFFFF"
-                />
-              </View>
-            );
-          })
-        : null}
-    </View>
-  );
-}
-
 function Legend({
   color,
   text,
@@ -848,6 +732,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFFFFF',
+  },
+  focusMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 3,
   },
   mapLegend: {
     flexDirection: 'row',

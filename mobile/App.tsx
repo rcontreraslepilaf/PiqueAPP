@@ -18,6 +18,8 @@ import {
 } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ExplorationProvider } from './src/context/ExplorationContext';
+
 import { CaptureScreen } from './src/screens/CaptureScreen';
 import { CatalogScreen } from './src/screens/CatalogScreen';
 import { ConditionsScreen } from './src/screens/ConditionsScreen';
@@ -61,8 +63,9 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator
+      <ExplorationProvider>
+        <NavigationContainer>
+          <Stack.Navigator
           screenOptions={{ headerShown: false }}
         >
           <Stack.Screen name="Main">
@@ -95,6 +98,7 @@ export default function App() {
           <Stack.Screen name="Deals">
             {({ navigation }) => (
               <DealsScreen
+                token={token}
                 onBack={() => navigation.goBack()}
               />
             )}
@@ -108,8 +112,9 @@ export default function App() {
               />
             )}
           </Stack.Screen>
-        </Stack.Navigator>
-      </NavigationContainer>
+          </Stack.Navigator>
+        </NavigationContainer>
+      </ExplorationProvider>
     </SafeAreaProvider>
   );
 }
@@ -165,6 +170,7 @@ function MainScreen({
 
         {tab === 'catalog' ? (
           <CatalogScreen
+            token={token}
             onOpenDeals={() =>
               navigation.navigate('Deals')
             }
@@ -251,8 +257,8 @@ function NavButton({
         size={21}
         color={
           active
-            ? '#D9A441'
-            : '#AFC0B6'
+            ? '#39B5FF'
+            : '#89A5B1'
         }
       />
       <Text
@@ -306,7 +312,7 @@ function CaptureNavButton({
 const styles = StyleSheet.create({
   shell: {
     flex: 1,
-    backgroundColor: '#10261C',
+    backgroundColor: '#031A22',
   },
   content: {
     flex: 1,
@@ -316,7 +322,7 @@ const styles = StyleSheet.create({
     minHeight: 72,
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: '#10261C',
+    backgroundColor: '#031A22',
     borderTopWidth: 1,
     borderTopColor: '#274535',
   },
@@ -331,12 +337,12 @@ const styles = StyleSheet.create({
     opacity: 0.68,
   },
   navText: {
-    color: '#AFC0B6',
+    color: '#89A5B1',
     fontSize: 10,
     fontWeight: '700',
   },
   navTextActive: {
-    color: '#D9A441',
+    color: '#39B5FF',
     fontWeight: '900',
   },
   captureNavWrapper: {
@@ -351,9 +357,9 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     marginTop: -20,
-    backgroundColor: '#D9A441',
+    backgroundColor: '#39B5FF',
     borderWidth: 4,
-    borderColor: '#10261C',
+    borderColor: '#031A22',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -362,7 +368,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.04 }],
   },
   captureNavText: {
-    color: '#AFC0B6',
+    color: '#89A5B1',
     fontSize: 10,
     fontWeight: '800',
     marginTop: 1,
