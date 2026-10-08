@@ -13,6 +13,8 @@ from app.models.gear import WardrobeItem
 from app.models.trophy import Trophy
 from app.models.user import Profile, User
 from app.schemas.profile import ProfileSummaryRead, ProfileUpdate
+from app.services.images import read_clean_image
+
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -25,10 +27,6 @@ PROFILE_STORAGE_ROOT = Path(
 PROFILE_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
 
 
 def _profile(current_user: User, db: Session) -> Profile:
@@ -145,28 +143,14 @@ async def upload_avatar(
 ):
     profile = _profile(current_user, db)
 
-    content_type = (file.content_type or "").lower()
-    extension = ALLOWED_IMAGE_TYPES.get(content_type)
-    if extension is None:
-        raise HTTPException(
-            status_code=415,
-            detail="Only JPG and PNG images are allowed",
-        )
-
-    data = await file.read(MAX_IMAGE_BYTES + 1)
-    if not data:
-        raise HTTPException(status_code=400, detail="The image is empty")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="The image exceeds the 8 MB limit",
-        )
+    image = await read_clean_image(file, MAX_IMAGE_BYTES)
+    extension = image.extension
 
     user_folder = PROFILE_STORAGE_ROOT / str(current_user.id)
     user_folder.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}{extension}"
     target = user_folder / filename
-    target.write_bytes(data)
+    target.write_bytes(image.data)
 
     previous = profile.avatar_url
     profile.avatar_url = f"{current_user.id}/{filename}"

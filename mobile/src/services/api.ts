@@ -77,7 +77,6 @@ export type CredentialCreatePayload = {
   license_number?: string | null;
   valid_from?: string | null;
   expires_at?: string | null;
-  document_url?: string | null;
   notes?: string | null;
 };
 

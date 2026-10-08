@@ -843,10 +843,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B261C',
   },
   heroVideo: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   heroContent: {
     position: 'relative',
@@ -980,6 +980,7 @@ const styles = StyleSheet.create({
   },
   solunarTop: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 15,
   },
@@ -993,6 +994,7 @@ const styles = StyleSheet.create({
   },
   solunarContent: {
     flex: 1,
+    minWidth: 140,
   },
   solunarPhase: {
     color: '#18291F',
@@ -1002,6 +1004,82 @@ const styles = StyleSheet.create({
   solunarDetail: {
     color: '#6D7A72',
     marginTop: 4,
+  },
+  fishingStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  fishingStatusText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  solunarProgressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E3ECE6',
+    overflow: 'hidden',
+  },
+  solunarProgressFill: {
+    height: '100%',
+    borderRadius: 4,
+    backgroundColor: '#D9A441',
+  },
+  solunarExplanation: {
+    color: '#315D49',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  solunarTipsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  solunarTip: {
+    flexGrow: 1,
+    flexBasis: 220,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderRadius: 16,
+    backgroundColor: '#F1F6F2',
+    padding: 14,
+  },
+  solunarTipIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#E3ECE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solunarTipContent: {
+    flex: 1,
+  },
+  solunarTipTitle: {
+    color: '#244B38',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  solunarTipText: {
+    color: '#5B7164',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  solunarNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  solunarNoticeText: {
+    flex: 1,
+    color: '#6D7A72',
+    fontSize: 12,
+    lineHeight: 18,
   },
   privacyCard: {
     marginTop: 22,

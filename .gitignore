@@ -1,4 +1,21 @@
 .env
+.env.*
+!.env.example
+
+# Private signing keys and certificates
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Generated Android builds and database backups
+*.apk
+*.aab
+*.dump
+backups/
+
 __pycache__/
 *.py[cod]
 .pytest_cache/

@@ -1,11 +1,13 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from 'react';
 
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -759,217 +761,158 @@ function CredentialCard({
   onDeleteImage: () => void;
   onDelete: () => void;
 }) {
-  const status =
-    getCredentialStatus(
-      credential.expires_at,
-    );
+  const status = getCredentialStatus(credential.expires_at);
+  const scale = useRef(new Animated.Value(1)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+
+  function animateCard(toScale: number, toLift: number) {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: toScale,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 7,
+      }),
+      Animated.spring(lift, {
+        toValue: toLift,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 7,
+      }),
+    ]).start();
+  }
 
   return (
-    <View style={styles.credentialCard}>
-      <View style={styles.credentialTop}>
-        <View style={styles.credentialIcon}>
-          <Ionicons
-            name="fish-outline"
-            size={26}
-            color="#D9A441"
-          />
+    <Animated.View
+      style={[
+        styles.credentialMotionWrap,
+        { transform: [{ scale }, { translateY: lift }] },
+      ]}
+    >
+      <Pressable
+        style={({ pressed }) => [
+          styles.credentialCard,
+          pressed && styles.credentialCardPressed,
+        ]}
+        onPressIn={() => animateCard(0.985, 2)}
+        onPressOut={() => animateCard(1, 0)}
+        onHoverIn={() => animateCard(1.012, -5)}
+        onHoverOut={() => animateCard(1, 0)}
+      >
+        <View style={styles.topographicDecor}>
+          <View style={[styles.topoRing, styles.topoRingOne]} />
+          <View style={[styles.topoRing, styles.topoRingTwo]} />
+          <View style={[styles.topoRing, styles.topoRingThree]} />
         </View>
 
-        <View style={styles.credentialHeading}>
-          <Text style={styles.credentialTitle}>
-            {credential.title}
-          </Text>
+        <View style={styles.credentialTop}>
+          <View style={styles.credentialIcon}>
+            <Ionicons name="fish-outline" size={30} color="#E2AE43" />
+          </View>
 
-          <Text style={styles.authority}>
-            {credential.authority}
-          </Text>
+          <View style={styles.credentialHeading}>
+            <Text style={styles.credentialTitle}>{credential.title}</Text>
+            <Text style={styles.authority}>{credential.authority}</Text>
+          </View>
+
+          <View style={[styles.statusBadge, { backgroundColor: status.background }]}>
+            <View style={[styles.statusDot, { backgroundColor: status.color }]} />
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.label}
+            </Text>
+          </View>
         </View>
 
-        <View
-          style={[
-            styles.statusBadge,
-            {
-              backgroundColor:
-                status.background,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.statusText,
-              {
-                color:
-                  status.color,
-              },
-            ]}
-          >
-            {status.label}
-          </Text>
+        <View style={styles.infoGrid}>
+          <InfoItem label="N.º LICENCIA" value={credential.license_number || 'No ingresado'} />
+          <InfoItem label="VÁLIDA DESDE" value={formatDate(credential.valid_from) || 'No informado'} />
+          <InfoItem label="VENCIMIENTO" value={formatDate(credential.expires_at) || 'No informado'} />
         </View>
-      </View>
 
-      <View style={styles.infoGrid}>
-        <InfoItem
-          label="N.º licencia"
-          value={
-            credential.license_number ||
-            'No ingresado'
-          }
-        />
-
-        <InfoItem
-          label="Válida desde"
-          value={
-            formatDate(
-              credential.valid_from,
-            ) || 'No informado'
-          }
-        />
-
-        <InfoItem
-          label="Vencimiento"
-          value={
-            formatDate(
-              credential.expires_at,
-            ) || 'No informado'
-          }
-        />
-      </View>
-
-      {credential.notes ? (
-        <Text style={styles.notes}>
-          {credential.notes}
-        </Text>
-      ) : null}
-
-      <View style={styles.documentSection}>
-        <View style={styles.documentState}>
-          <Ionicons
-            name={
-              credential.document_url
-                ? 'image-outline'
-                : 'document-outline'
-            }
-            size={18}
-            color="#66756D"
-          />
-          <Text style={styles.documentStateText}>
-            {credential.document_url
-              ? 'Imagen de licencia guardada'
-              : 'Sin imagen adjunta'}
-          </Text>
-        </View>
+        {credential.notes ? <Text style={styles.notes}>{credential.notes}</Text> : null}
 
         {uploading ? (
           <View style={styles.uploadingRow}>
-            <ActivityIndicator
-              size="small"
-              color="#D9A441"
-            />
-            <Text style={styles.uploadingText}>
-              Subiendo imagen…
-            </Text>
+            <ActivityIndicator size="small" color="#E2AE43" />
+            <Text style={styles.uploadingText}>Subiendo imagen…</Text>
           </View>
         ) : (
           <View style={styles.documentActions}>
             {credential.document_url ? (
               <>
+                <AnimatedCredentialAction primary icon="eye-outline" label="Mostrar licencia" onPress={onShowImage} />
+                <AnimatedCredentialAction icon="images-outline" label="Cambiar imagen" onPress={onPickImage} />
                 <Pressable
-                  style={styles.primaryDocumentButton}
-                  onPress={onShowImage}
-                >
-                  <Ionicons
-                    name="eye-outline"
-                    size={18}
-                    color="#10261C"
-                  />
-                  <Text style={styles.primaryDocumentText}>
-                    Mostrar licencia
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.secondaryDocumentButton}
-                  onPress={onPickImage}
-                >
-                  <Ionicons
-                    name="images-outline"
-                    size={18}
-                    color="#315D49"
-                  />
-                  <Text style={styles.secondaryDocumentText}>
-                    Cambiar imagen
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.iconDocumentButton}
+                  style={({ pressed }) => [styles.iconDocumentButton, pressed && { opacity: 0.65 }]}
                   onPress={onDeleteImage}
                 >
-                  <Ionicons
-                    name="image-outline"
-                    size={18}
-                    color="#9B463A"
-                  />
-                  <Ionicons
-                    name="close-circle"
-                    size={12}
-                    color="#9B463A"
-                    style={styles.smallDeleteIcon}
-                  />
+                  <Ionicons name="image-outline" size={18} color="#F08B79" />
+                  <Ionicons name="close-circle" size={12} color="#F08B79" style={styles.smallDeleteIcon} />
                 </Pressable>
               </>
             ) : (
               <>
-                <Pressable
-                  style={styles.primaryDocumentButton}
-                  onPress={onPickImage}
-                >
-                  <Ionicons
-                    name="images-outline"
-                    size={18}
-                    color="#10261C"
-                  />
-                  <Text style={styles.primaryDocumentText}>
-                    Elegir imagen
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.secondaryDocumentButton}
-                  onPress={onTakePhoto}
-                >
-                  <Ionicons
-                    name="camera-outline"
-                    size={18}
-                    color="#315D49"
-                  />
-                  <Text style={styles.secondaryDocumentText}>
-                    Tomar foto
-                  </Text>
-                </Pressable>
+                <AnimatedCredentialAction primary icon="images-outline" label="Elegir imagen" onPress={onPickImage} />
+                <AnimatedCredentialAction icon="camera-outline" label="Tomar foto" onPress={onTakePhoto} />
               </>
             )}
           </View>
         )}
-      </View>
 
-      <View style={styles.cardFooter}>
-        <Pressable
-          style={styles.deleteButton}
-          onPress={onDelete}
-        >
-          <Ionicons
-            name="trash-outline"
-            size={18}
-            color="#9B463A"
-          />
-          <Text style={styles.deleteText}>
-            Eliminar credencial
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+        <View style={styles.cardFooter}>
+          <Pressable
+            style={({ pressed }) => [styles.deleteButton, pressed && { opacity: 0.65 }]}
+            onPress={onDelete}
+          >
+            <Ionicons name="trash-outline" size={18} color="#F08B79" />
+            <Text style={styles.deleteText}>Eliminar credencial</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+
+function AnimatedCredentialAction({
+  primary = false,
+  icon,
+  label,
+  onPress,
+}: {
+  primary?: boolean;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  onPress: () => void;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  function animate(value: number) {
+    Animated.spring(scale, {
+      toValue: value,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 7,
+    }).start();
+  }
+
+  return (
+    <Animated.View style={[styles.credentialActionWrap, { transform: [{ scale }] }]}>
+      <Pressable
+        style={({ pressed }) => [
+          primary ? styles.primaryDocumentButton : styles.secondaryDocumentButton,
+          pressed && styles.credentialActionPressed,
+        ]}
+        onPress={onPress}
+        onPressIn={() => animate(0.96)}
+        onPressOut={() => animate(1)}
+        onHoverIn={() => animate(1.02)}
+        onHoverOut={() => animate(1)}
+      >
+        <Ionicons name={icon} size={19} color={primary ? '#10261C' : '#EAF4EF'} />
+        <Text style={primary ? styles.primaryDocumentText : styles.secondaryDocumentText}>{label}</Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -1375,24 +1318,59 @@ const styles =
       fontWeight: '900',
     },
 
-    credentialCard: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: 22,
-      padding: 19,
-      marginBottom: 13,
+    credentialMotionWrap: {
+      marginBottom: 18,
     },
+
+    credentialCard: {
+      position: 'relative',
+      overflow: 'hidden',
+      backgroundColor: '#063B2D',
+      borderRadius: 28,
+      padding: 28,
+      borderWidth: 1,
+      borderColor: 'rgba(226,174,67,0.18)',
+      shadowColor: '#0B251C',
+      shadowOpacity: 0.24,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 14 },
+      elevation: 10,
+    },
+
+    credentialCardPressed: {
+      borderColor: 'rgba(226,174,67,0.38)',
+    },
+
+    topographicDecor: {
+      ...StyleSheet.absoluteFill,
+      opacity: 0.16,
+    },
+
+    topoRing: {
+      position: 'absolute',
+      borderWidth: 1,
+      borderColor: '#B8D8C9',
+      borderRadius: 999,
+    },
+    topoRingOne: { width: 260, height: 180, right: -50, top: -50 },
+    topoRingTwo: { width: 360, height: 250, right: -80, top: -80 },
+    topoRingThree: { width: 470, height: 330, right: -120, top: -120 },
 
     credentialTop: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: 14,
+      position: 'relative',
+      zIndex: 2,
     },
 
     credentialIcon: {
-      width: 52,
-      height: 52,
-      borderRadius: 16,
-      backgroundColor: '#153D2E',
+      width: 64,
+      height: 64,
+      borderRadius: 22,
+      backgroundColor: 'rgba(226,174,67,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(226,174,67,0.22)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1402,21 +1380,32 @@ const styles =
     },
 
     credentialTitle: {
-      color: '#17291F',
-      fontSize: 17,
+      color: '#F7FBF8',
+      fontSize: 23,
+      lineHeight: 28,
       fontWeight: '900',
     },
 
     authority: {
-      color: '#738078',
+      color: '#C8D8D0',
       marginTop: 3,
-      fontSize: 12,
+      fontSize: 14,
+      fontWeight: '700',
     },
 
     statusBadge: {
       borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
 
     statusText: {
@@ -1425,36 +1414,44 @@ const styles =
     },
 
     infoGrid: {
+      position: 'relative',
+      zIndex: 2,
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 10,
-      marginTop: 18,
+      gap: 14,
+      marginTop: 28,
     },
 
     infoItem: {
       flexGrow: 1,
       flexBasis: 180,
-      backgroundColor: '#F7F7F2',
+      backgroundColor: 'transparent',
       borderRadius: 14,
-      padding: 12,
+      paddingVertical: 6,
+      paddingRight: 12,
     },
 
     infoLabel: {
-      color: '#7A867F',
-      fontSize: 10,
+      color: '#B6C9C0',
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
     },
 
     infoValue: {
-      color: '#24372C',
-      fontWeight: '800',
-      marginTop: 3,
+      color: '#FFFFFF',
+      fontWeight: '900',
+      fontSize: 21,
+      marginTop: 5,
     },
 
     notes: {
-      color: '#5E6D64',
-      lineHeight: 19,
-      fontSize: 12,
-      marginTop: 14,
+      position: 'relative',
+      zIndex: 2,
+      color: '#D8E4DE',
+      lineHeight: 20,
+      fontSize: 13,
+      marginTop: 19,
     },
 
     documentSection: {
@@ -1466,52 +1463,69 @@ const styles =
     },
 
     documentActions: {
+      position: 'relative',
+      zIndex: 2,
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 9,
+      gap: 12,
+      marginTop: 24,
+      alignItems: 'center',
+    },
+
+    credentialActionWrap: {
+      flexGrow: 1,
+      flexBasis: 220,
+    },
+
+    credentialActionPressed: {
+      opacity: 0.82,
     },
 
     primaryDocumentButton: {
-      minHeight: 42,
+      minHeight: 52,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 7,
-      backgroundColor: '#D9A441',
-      borderRadius: 12,
-      paddingHorizontal: 13,
-      paddingVertical: 10,
+      gap: 8,
+      backgroundColor: '#E2AE43',
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
     },
 
     primaryDocumentText: {
       color: '#10261C',
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '900',
     },
 
     secondaryDocumentButton: {
-      minHeight: 42,
+      minHeight: 52,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 7,
-      backgroundColor: '#E3ECE6',
-      borderRadius: 12,
-      paddingHorizontal: 13,
-      paddingVertical: 10,
+      gap: 8,
+      backgroundColor: 'rgba(255,255,255,0.03)',
+      borderWidth: 1,
+      borderColor: 'rgba(234,244,239,0.55)',
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
     },
 
     secondaryDocumentText: {
-      color: '#315D49',
-      fontSize: 12,
+      color: '#EAF4EF',
+      fontSize: 14,
       fontWeight: '900',
     },
 
     iconDocumentButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 12,
-      backgroundColor: '#F7E5E1',
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      backgroundColor: 'rgba(240,139,121,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(240,139,121,0.18)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1613,13 +1627,15 @@ const styles =
     },
 
     cardFooter: {
-      marginTop: 16,
-      paddingTop: 13,
+      position: 'relative',
+      zIndex: 2,
+      marginTop: 18,
+      paddingTop: 14,
       borderTopWidth: 1,
-      borderTopColor: '#ECEFEA',
+      borderTopColor: 'rgba(255,255,255,0.10)',
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      justifyContent: 'flex-end',
       gap: 12,
     },
 
@@ -1641,9 +1657,9 @@ const styles =
     },
 
     deleteText: {
-      color: '#9B463A',
-      fontWeight: '800',
-      fontSize: 11,
+      color: '#F08B79',
+      fontWeight: '900',
+      fontSize: 12,
     },
 
     bottomSpace: {

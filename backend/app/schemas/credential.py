@@ -13,7 +13,9 @@ class CredentialCreate(BaseModel):
     valid_from: date | None = None
     expires_at: date | None = None
 
-    document_url: str | None = Field(default=None, max_length=1024)
+    # Only authenticated uploads may assign a document reference.
+    # Null remains compatible with existing clients; paths/URLs are rejected.
+    document_url: None = None
     notes: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")

@@ -15,6 +15,8 @@ from app.models.trophy import Trophy, TrophyMedia
 from app.models.user import User
 from app.schemas.trophy import TrophyCreate, TrophyRead
 from app.services.location_privacy import geography_point, make_public_location
+from app.services.images import read_clean_image
+
 
 router = APIRouter(prefix="/trophies", tags=["trophies"])
 
@@ -27,10 +29,6 @@ TROPHY_STORAGE_ROOT = Path(
 TROPHY_STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
 
 
 def _owned_trophy(
@@ -155,28 +153,14 @@ async def upload_trophy_image(
 ):
     trophy = _owned_trophy(trophy_id, current_user, db)
 
-    content_type = (file.content_type or "").lower()
-    extension = ALLOWED_IMAGE_TYPES.get(content_type)
-    if extension is None:
-        raise HTTPException(
-            status_code=415,
-            detail="Only JPG and PNG images are allowed",
-        )
-
-    data = await file.read(MAX_IMAGE_BYTES + 1)
-    if not data:
-        raise HTTPException(status_code=400, detail="The image is empty")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="The image exceeds the 10 MB limit",
-        )
+    image = await read_clean_image(file, MAX_IMAGE_BYTES)
+    extension = image.extension
 
     user_folder = TROPHY_STORAGE_ROOT / str(current_user.id) / str(trophy.id)
     user_folder.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid4().hex}{extension}"
     target = user_folder / filename
-    target.write_bytes(data)
+    target.write_bytes(image.data)
 
     previous_media = list(
         db.scalars(
@@ -193,7 +177,7 @@ async def upload_trophy_image(
         media_type=MediaType.IMAGE,
         media_url=relative_path,
         thumbnail_url=None,
-        metadata_json={"content_type": content_type},
+        metadata_json={"content_type": image.content_type},
     )
     db.add(media)
 

@@ -19,6 +19,62 @@ export type Product = {
   average_rating: number | null;
   lowest_price: string | null;
   currency: string | null;
+  media_urls: string[];
+};
+
+export type ProductOffer = {
+  id: string;
+  merchant_id: string;
+  merchant_name: string;
+  price: string;
+  normal_price: string | null;
+  currency: string;
+  product_url: string | null;
+  stock_status: 'in_stock' | 'low_stock' | 'out_of_stock' | 'unknown';
+  observed_at: string;
+};
+
+export type WardrobeItem = {
+  id: string;
+  owner_id: string;
+  catalog_product_id: string | null;
+  category: string;
+  brand: string | null;
+  model: string | null;
+  name: string;
+  description: string | null;
+  specifications: Record<string, unknown>;
+  photo_url: string | null;
+  visibility: 'private' | 'followers' | 'public';
+};
+
+export type WardrobeItemCreatePayload = {
+  catalog_product_id?: string | null;
+  category: string;
+  brand?: string | null;
+  model?: string | null;
+  name: string;
+  description?: string | null;
+  specifications?: Record<string, unknown>;
+  photo_url?: string | null;
+  visibility?: WardrobeItem['visibility'];
+};
+
+export type OfferValidationStatus = 'available' | 'expired' | 'wrong_price';
+
+export type DealCreatePayload = {
+  product_id: string;
+  merchant_id?: string | null;
+  merchant_name: string;
+  price: number;
+  normal_price?: number | null;
+  currency?: string;
+  url?: string | null;
+  notes?: string | null;
+  store_latitude?: number | null;
+  store_longitude?: number | null;
+  store_region?: string | null;
+  expires_at?: string | null;
 };
 
 export type Trophy = {
@@ -164,12 +220,18 @@ export type ProfileUpdatePayload = {
 
 export type Deal = {
   id: string;
+  reporter_id: string;
   product_id: string;
+  merchant_id: string | null;
   merchant_name: string;
   price: string;
   normal_price: string | null;
   currency: string;
   store_region: string | null;
+  url: string | null;
+  notes: string | null;
+  expires_at: string | null;
+  created_at: string;
   available_votes: number;
   expired_votes: number;
   wrong_price_votes: number;

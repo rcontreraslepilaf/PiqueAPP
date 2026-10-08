@@ -385,7 +385,7 @@ export function CatalogScreen({
                         <Text style={styles.detailHeading}>Ofertas de tiendas</Text>
                         {offersLoadingId === product.id ? <ActivityIndicator color="#D9A441" /> : null}
                         {(offersByProduct[product.id] ?? []).map((offer) => <View key={offer.id} style={styles.offerRow}><View style={styles.offerText}><Text style={styles.offerMerchant}>{offer.merchant_name}</Text><Text style={styles.offerStock}>{stockLabel(offer.stock_status)}</Text></View><Text style={styles.offerPrice}>{formatMoney(offer.price, offer.currency)}</Text></View>)}
-                        {offersByProduct[product.id] && offersByProduct[product.id].length === 0 ? <Text style={styles.detailMuted}>Todavía no hay ofertas de tiendas para este producto.</Text> : null}
+                        {offersByProduct[product.id]?.length === 0 ? <Text style={styles.detailMuted}>Todavía no hay ofertas de tiendas para este producto.</Text> : null}
                       </View>
                     ) : null}
                   </View>

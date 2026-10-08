@@ -3,12 +3,14 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type ReactNode,
 } from 'react';
 
 import {
   ActivityIndicator,
   Animated,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -63,6 +65,92 @@ const TROPHY_DEMO =
 
 const PUBLIC_WEB_URL = 'https://pescaoutdoor.cl';
 
+
+type SpeciesInfo = {
+  key: string;
+  label: string;
+  image: number;
+  habitat: string;
+  description: string;
+  environment: 'Agua dulce' | 'Mar / costa';
+};
+
+const SPECIES_LIBRARY: [SpeciesInfo, ...SpeciesInfo[]] = [
+  {
+    key: 'trucha-arcoiris',
+    label: 'Trucha arcoíris',
+    image: require('../../assets/species/trucha-arcoiris.png'),
+    habitat: 'Ríos, lagos y esteros fríos y bien oxigenados.',
+    description:
+      'Salmonídeo muy apreciado en pesca recreativa. En Chile es especialmente frecuente en aguas interiores del centro-sur y sur.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'trucha-fario',
+    label: 'Trucha fario',
+    image: require('../../assets/species/trucha-fario.jpg'),
+    habitat: 'Ríos de corriente, pozones, lagos y sectores con refugio.',
+    description:
+      'También conocida como trucha café. Prefiere aguas frías y suele ocupar sectores con estructura, sombra y cambios de corriente.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'carpa',
+    label: 'Carpa',
+    image: require('../../assets/species/carpa.png'),
+    habitat: 'Lagunas, embalses y sectores de corriente lenta.',
+    description:
+      'Pez resistente de aguas tranquilas o templadas. Puede encontrarse en fondos blandos y zonas con vegetación.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'pejerrey',
+    label: 'Pejerrey',
+    image: require('../../assets/species/pejerrey.png'),
+    habitat: 'Lagunas, lagos, estuarios y algunos ambientes costeros.',
+    description:
+      'Pez alargado y veloz. Según la especie puede ocupar ambientes de agua dulce, salobre o marinos.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'perca',
+    label: 'Perca / trucha negra',
+    image: require('../../assets/species/perca.png'),
+    habitat: 'Ríos y lagos del sur de Chile.',
+    description:
+      'Pez nativo de aguas continentales australes. En la app lo usamos como referencia visual para registros locales de perca o “trucha negra”.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'salmon-chinook',
+    label: 'Salmón Chinook',
+    image: require('../../assets/species/salmon-chinook.png'),
+    habitat: 'Ríos grandes, desembocaduras y ambientes marinos durante su ciclo de vida.',
+    description:
+      'Salmón de gran tamaño muy valorado por pescadores recreativos. La regulación puede variar por cuenca y temporada.',
+    environment: 'Agua dulce',
+  },
+  {
+    key: 'corvina',
+    label: 'Corvina',
+    image: require('../../assets/species/corvina.png'),
+    habitat: 'Playas, costa arenosa, estuarios y sectores costeros.',
+    description:
+      'Especie marina deportiva muy conocida en Chile, buscada principalmente desde orilla y embarcación.',
+    environment: 'Mar / costa',
+  },
+  {
+    key: 'merlusa',
+    label: 'Merluza',
+    image: require('../../assets/species/merlusa.png'),
+    habitat: 'Ambientes marinos, principalmente fondos y plataforma continental.',
+    description:
+      'Pez marino de amplia presencia en Chile. Su disponibilidad y regulación dependen de la zona y especie específica.',
+    environment: 'Mar / costa',
+  },
+];
+
+
 export function HomeScreen({
   token,
   onOpenConditions,
@@ -87,6 +175,7 @@ export function HomeScreen({
   const [items, setItems] = useState<Trophy[]>([]);
   const [loading, setLoading] = useState(true);
   const [shareVisible, setShareVisible] = useState(false);
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
 
   const [affiliateRecommendations, setAffiliateRecommendations] =
     useState<AffiliateRecommendation[]>([]);
@@ -112,6 +201,9 @@ export function HomeScreen({
     });
   const [heroActivity, setHeroActivity] =
     useState<number | null>(null);
+
+  const [selectedSpeciesInfo, setSelectedSpeciesInfo] =
+    useState<SpeciesInfo | null>(null);
 
   const [shareTarget, setShareTarget] = useState<ShareTarget>({
     title: 'Pesca & Outdoor',
@@ -269,7 +361,13 @@ export function HomeScreen({
               </Text>
             </View>
 
-            <Pressable style={styles.notificationButton}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.notificationButton,
+                pressed && styles.notificationButtonPressed,
+              ]}
+              onPress={() => setNotificationsVisible(true)}
+            >
               <Ionicons
                 name="notifications-outline"
                 size={24}
@@ -296,15 +394,40 @@ export function HomeScreen({
             />
 
             <View style={styles.heroContent}>
-              <View style={styles.heroBadge}>
-                <Ionicons
-                  name="cloud-outline"
-                  size={18}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.heroBadgeText}>
-                  Condiciones de hoy
-                </Text>
+              <View style={styles.heroTopRow}>
+                <View style={styles.heroBadge}>
+                  <Ionicons
+                    name="cloud-outline"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.heroBadgeText}>
+                    Condiciones de hoy
+                  </Text>
+                </View>
+
+                <View style={styles.heroLocationCard}>
+                  <View style={styles.heroLocationIcon}>
+                    <Ionicons
+                      name="location"
+                      size={18}
+                      color="#39B5FF"
+                    />
+                  </View>
+
+                  <View style={styles.heroLocationContent}>
+                    <Text style={styles.heroLocationEyebrow}>
+                      TU UBICACIÓN
+                    </Text>
+                    <Text
+                      style={styles.heroLocationText}
+                      numberOfLines={2}
+                    >
+                      {outdoorContext?.location.label ??
+                        'Activa la ubicación para ver tu zona'}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               <Text style={styles.heroTitle}>
@@ -403,7 +526,7 @@ export function HomeScreen({
           <View style={styles.sectionHeaderRow}>
             <View>
               <Text style={styles.sectionTitle}>
-                Temporadas en tu zona
+                Especies y temporadas en tu zona
               </Text>
               <Text style={styles.sectionSubtitle}>
                 {outdoorContext
@@ -433,6 +556,7 @@ export function HomeScreen({
             onEnableLocation={() =>
               void loadOutdoorContext(true)
             }
+            onOpenInfo={setSelectedSpeciesInfo}
           />
 
           <View style={styles.sectionHeaderRow}>
@@ -625,6 +749,185 @@ export function HomeScreen({
       </ScrollView>
       </AnimatedBackground>
 
+
+      <Modal
+        visible={selectedSpeciesInfo !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedSpeciesInfo(null)}
+      >
+        <Pressable
+          style={styles.speciesModalBackdrop}
+          onPress={() => setSelectedSpeciesInfo(null)}
+        >
+          <Pressable
+            style={styles.speciesModalCard}
+            onPress={(event) => event.stopPropagation()}
+          >
+            {selectedSpeciesInfo ? (
+              <>
+                <View style={styles.speciesModalImageWrap}>
+                  <Image
+                    source={selectedSpeciesInfo.image}
+                    style={styles.speciesModalImage}
+                    contentFit="contain"
+                    transition={250}
+                  />
+                  <View style={styles.speciesModalEnvironment}>
+                    <Text style={styles.speciesModalEnvironmentText}>
+                      {selectedSpeciesInfo.environment}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.speciesModalBody}>
+                  <View style={styles.speciesModalHeader}>
+                    <View style={styles.speciesModalHeaderText}>
+                      <Text style={styles.speciesModalEyebrow}>
+                        FICHA DE ESPECIE
+                      </Text>
+                      <Text style={styles.speciesModalTitle}>
+                        {selectedSpeciesInfo.label}
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.speciesModalClose,
+                        pressed && styles.sourceLinkPressed,
+                      ]}
+                      onPress={() => setSelectedSpeciesInfo(null)}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={22}
+                        color="#EAF7FC"
+                      />
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.speciesModalInfoRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={20}
+                      color="#39B5FF"
+                    />
+                    <View style={styles.speciesModalInfoContent}>
+                      <Text style={styles.speciesModalInfoLabel}>
+                        Hábitat habitual
+                      </Text>
+                      <Text style={styles.speciesModalInfoText}>
+                        {selectedSpeciesInfo.habitat}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.speciesModalDescription}>
+                    {selectedSpeciesInfo.description}
+                  </Text>
+
+                  <View style={styles.speciesModalNotice}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={18}
+                      color="#F0B34C"
+                    />
+                    <Text style={styles.speciesModalNoticeText}>
+                      Esta ficha identifica la especie. La temporada, límites,
+                      vedas y normativa se consultan por separado según la zona.
+                    </Text>
+                  </View>
+                </View>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+
+      <Modal
+        visible={notificationsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotificationsVisible(false)}
+      >
+        <Pressable
+          style={styles.notificationModalBackdrop}
+          onPress={() => setNotificationsVisible(false)}
+        >
+          <Pressable
+            style={styles.notificationModalCard}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View style={styles.notificationModalHeader}>
+              <View>
+                <Text style={styles.notificationModalEyebrow}>
+                  CENTRO DE AVISOS
+                </Text>
+                <Text style={styles.notificationModalTitle}>
+                  Notificaciones
+                </Text>
+                <Text style={styles.notificationModalSubtitle}>
+                  Resumen local del MVP
+                </Text>
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.notificationModalClose,
+                  pressed && { opacity: 0.7 },
+                ]}
+                onPress={() => setNotificationsVisible(false)}
+              >
+                <Ionicons name="close" size={22} color="#EAF7FC" />
+              </Pressable>
+            </View>
+
+            <NotificationItem
+              icon="partly-sunny-outline"
+              title="Condiciones actualizadas"
+              text={
+                heroActivity !== null
+                  ? `Actividad estimada ${heroActivity}/100. Revisa viento, temperatura y pronóstico antes de salir.`
+                  : 'Revisa las condiciones de hoy antes de preparar tu equipo.'
+              }
+            />
+
+            <NotificationItem
+              icon="fish-outline"
+              title="Especies y temporadas"
+              text={
+                outdoorContext
+                  ? `Hay información regional disponible para ${outdoorContext.location.label}.`
+                  : 'Activa la ubicación para recibir información de temporadas de tu zona.'
+              }
+            />
+
+            <NotificationItem
+              icon="card-outline"
+              title="Licencia y documentos"
+              text={
+                credentials[0]?.expires_at
+                  ? `Tu licencia registrada vence el ${formatHomeDate(credentials[0].expires_at)}.`
+                  : 'Guarda tu licencia para tener sus datos disponibles en tu cuenta.'
+              }
+            />
+
+            <View style={styles.notificationMvpNote}>
+              <Ionicons
+                name="information-circle-outline"
+                size={17}
+                color="#F0B34C"
+              />
+              <Text style={styles.notificationMvpNoteText}>
+                En esta etapa las alertas se generan dentro de la app. Las
+                notificaciones push llegarán en una fase posterior del piloto.
+              </Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <ShareMenu
         visible={shareVisible}
         onClose={() => setShareVisible(false)}
@@ -633,6 +936,30 @@ export function HomeScreen({
         url={shareTarget.url}
       />
     </>
+  );
+}
+
+
+function NotificationItem({
+  icon,
+  title,
+  text,
+}: {
+  icon: IconName;
+  title: string;
+  text: string;
+}) {
+  return (
+    <View style={styles.notificationItem}>
+      <View style={styles.notificationItemIcon}>
+        <Ionicons name={icon} size={20} color="#39B5FF" />
+      </View>
+
+      <View style={styles.notificationItemContent}>
+        <Text style={styles.notificationItemTitle}>{title}</Text>
+        <Text style={styles.notificationItemText}>{text}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -713,6 +1040,60 @@ function HomeTrophyImage({
 }
 
 
+
+function MotionPressable({
+  children,
+  onPress,
+  style,
+}: {
+  children: ReactNode;
+  onPress: () => void;
+  style: object;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+
+  function animate(toScale: number, toLift: number) {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: toScale,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 7,
+      }),
+      Animated.spring(lift, {
+        toValue: toLift,
+        useNativeDriver: true,
+        speed: 28,
+        bounciness: 7,
+      }),
+    ]).start();
+  }
+
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { scale },
+          { translateY: lift },
+        ],
+      }}
+    >
+      <Pressable
+        style={style}
+        onPress={onPress}
+        onPressIn={() => animate(0.975, 2)}
+        onPressOut={() => animate(1, 0)}
+        onHoverIn={() => animate(1.015, -3)}
+        onHoverOut={() => animate(1, 0)}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+
 function CredentialHomeCard({
   credential,
   loading,
@@ -735,33 +1116,37 @@ function CredentialHomeCard({
 
   if (!credential) {
     return (
-      <Pressable
+      <MotionPressable
         style={styles.credentialHomeCard}
         onPress={onPress}
       >
-        <View style={styles.credentialHomeIcon}>
-          <Ionicons
-            name="card-outline"
-            size={25}
-            color="#39B5FF"
-          />
+        <View style={styles.credentialHomeIllustration}>
+          <Text style={styles.credentialFishingEmoji}>🎣</Text>
         </View>
 
         <View style={styles.credentialHomeContent}>
+          <Text style={styles.credentialHomeEyebrow}>
+            DOCUMENTOS DE PESCA
+          </Text>
           <Text style={styles.credentialHomeTitle}>
             Guarda tu licencia de pesca
           </Text>
           <Text style={styles.credentialHomeMuted}>
-            Ten a mano su número y fecha de vencimiento.
+            Ten tu permiso, número y vencimiento siempre disponibles.
           </Text>
         </View>
 
-        <Ionicons
-          name="chevron-forward"
-          size={21}
-          color="#91AAB4"
-        />
-      </Pressable>
+        <View style={styles.credentialHomeAction}>
+          <Text style={styles.credentialHomeActionText}>
+            Agregar
+          </Text>
+          <Ionicons
+            name="arrow-forward"
+            size={18}
+            color="#031A22"
+          />
+        </View>
+      </MotionPressable>
     );
   }
 
@@ -770,19 +1155,18 @@ function CredentialHomeCard({
   );
 
   return (
-    <Pressable
+    <MotionPressable
       style={styles.credentialHomeCard}
       onPress={onPress}
     >
-      <View style={styles.credentialHomeIcon}>
-        <Ionicons
-          name="fish-outline"
-          size={25}
-          color="#39B5FF"
-        />
+      <View style={styles.credentialHomeIllustration}>
+        <Text style={styles.credentialFishingEmoji}>🎣</Text>
       </View>
 
       <View style={styles.credentialHomeContent}>
+        <Text style={styles.credentialHomeEyebrow}>
+          LICENCIA DE PESCA
+        </Text>
         <Text style={styles.credentialHomeTitle}>
           {credential.title}
         </Text>
@@ -815,7 +1199,7 @@ function CredentialHomeCard({
           {status.label}
         </Text>
       </View>
-    </Pressable>
+    </MotionPressable>
   );
 }
 
@@ -862,16 +1246,115 @@ function formatHomeDate(
 }
 
 
+
+function buildRegionalSeasonList(context: OutdoorContext): SeasonSummary[] {
+  const base = [...context.seasons];
+  const location = normalizeSpeciesName(context.location.label ?? '');
+
+  // MVP regional: agregamos especies habituales de La Araucanía como fichas
+  // informativas. No inventamos apertura/cierre: quedan como "Revisar normativa".
+  if (location.includes('araucania') || location.includes('cholchol')) {
+    const regional: SeasonSummary[] = [
+      {
+        category: 'pesca',
+        species: 'Trucha arcoíris',
+        scientific_name: null,
+        source_title: 'SERNAPESCA — información de pesca recreativa',
+        status: 'regulated',
+        status_label: 'Revisar normativa vigente',
+        period: 'Especie habitual de ríos y lagos de la zona',
+        summary:
+          'Salmonídeo frecuente en aguas frías y oxigenadas. La apertura, límites y modalidades dependen del cuerpo de agua y la temporada vigente.',
+        source_url: 'https://www.sernapesca.cl/',
+        authority: 'SERNAPESCA',
+      },
+      {
+        category: 'pesca',
+        species: 'Trucha fario',
+        scientific_name: null,
+        source_title: 'SERNAPESCA — información de pesca recreativa',
+        status: 'regulated',
+        status_label: 'Revisar normativa vigente',
+        period: 'Especie habitual de ríos y lagos de la zona',
+        summary:
+          'También conocida como trucha café. Suele encontrarse en sectores con corriente, pozones, sombra y estructura.',
+        source_url: 'https://www.sernapesca.cl/',
+        authority: 'SERNAPESCA',
+      },
+      {
+        category: 'pesca',
+        species: 'Pejerrey',
+        scientific_name: null,
+        source_title: 'SERNAPESCA — información de pesca recreativa',
+        status: 'regulated',
+        status_label: 'Revisar normativa vigente',
+        period: 'Presencia según cuerpo de agua',
+        summary:
+          'Pez de aguas interiores y ambientes estuarinos según especie. Conviene verificar la regulación específica del lugar.',
+        source_url: 'https://www.sernapesca.cl/',
+        authority: 'SERNAPESCA',
+      },
+      {
+        category: 'pesca',
+        species: 'Carpa',
+        scientific_name: null,
+        source_title: 'SERNAPESCA — información de pesca recreativa',
+        status: 'regulated',
+        status_label: 'Revisar normativa vigente',
+        period: 'Presencia en lagunas, embalses y aguas lentas',
+        summary:
+          'Especie resistente asociada a aguas más tranquilas. La app la muestra como especie potencial de la macrozona y no como garantía de presencia en un punto específico.',
+        source_url: 'https://www.sernapesca.cl/',
+        authority: 'SERNAPESCA',
+      },
+      {
+        category: 'pesca',
+        species: 'Bagre',
+        scientific_name: null,
+        source_title: 'SERNAPESCA — información de pesca recreativa',
+        status: 'regulated',
+        status_label: 'Revisar normativa vigente',
+        period: 'Presencia local variable',
+        summary:
+          'Registro referencial para aguas continentales. La presencia exacta debe confirmarse por cuenca y normativa local.',
+        source_url: 'https://www.sernapesca.cl/',
+        authority: 'SERNAPESCA',
+      },
+    ];
+
+    for (const candidate of regional) {
+      const candidateName = normalizeSpeciesName(candidate.species);
+      const alreadyExists = base.some((item) => {
+        const existing = normalizeSpeciesName(item.species);
+        return (
+          existing === candidateName ||
+          existing.includes(candidateName) ||
+          candidateName.includes(existing)
+        );
+      });
+
+      if (!alreadyExists) {
+        base.push(candidate);
+      }
+    }
+  }
+
+  return base;
+}
+
+
 function SeasonPanel({
   context,
   loading,
   message,
   onEnableLocation,
+  onOpenInfo,
 }: {
   context: OutdoorContext | null;
   loading: boolean;
   message: string;
   onEnableLocation: () => void;
+  onOpenInfo: (info: SpeciesInfo) => void;
 }) {
   if (loading) {
     return (
@@ -917,13 +1400,16 @@ function SeasonPanel({
     );
   }
 
+  const visibleSeasons = buildRegionalSeasonList(context);
+
   return (
     <View style={styles.seasonCard}>
-      {context.seasons.slice(0, 5).map((item, index) => (
+      {visibleSeasons.map((item, index) => (
         <SeasonRow
           key={`${item.category}-${item.species}`}
           item={item}
-          last={index === Math.min(context.seasons.length, 5) - 1}
+          last={index === visibleSeasons.length - 1}
+          onOpenInfo={onOpenInfo}
         />
       ))}
 
@@ -949,11 +1435,14 @@ function SeasonPanel({
 function SeasonRow({
   item,
   last,
+  onOpenInfo,
 }: {
   item: SeasonSummary;
   last: boolean;
+  onOpenInfo: (info: SpeciesInfo) => void;
 }) {
   const visual = getSeasonVisual(item.status);
+  const speciesVisual = getSpeciesVisual(item.species, item.category);
 
   return (
     <View
@@ -962,41 +1451,49 @@ function SeasonRow({
         last && styles.seasonRowLast,
       ]}
     >
-      <View
-        style={[
-          styles.seasonStatusIcon,
-          { backgroundColor: visual.background },
-        ]}
-      >
-        <Ionicons
-          name={visual.icon}
-          size={20}
-          color={visual.color}
-        />
-      </View>
+      {speciesVisual.image ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.speciesVisual,
+            pressed && styles.speciesVisualPressed,
+          ]}
+          onPress={() => onOpenInfo(speciesVisual.info)}
+        >
+          <Image
+            source={speciesVisual.image}
+            style={styles.speciesPhoto}
+            contentFit="contain"
+            transition={250}
+          />
+          <View style={styles.speciesImageShade} />
+          <View style={styles.speciesImageLabel}>
+            <Text style={styles.speciesKind}>
+              {speciesVisual.label}
+            </Text>
+            <Text style={styles.speciesTapHint}>VER</Text>
+            <Ionicons
+              name="information-circle-outline"
+              size={13}
+              color="#9BDDF8"
+            />
+          </View>
+        </Pressable>
+      ) : (
+        <View style={styles.speciesVisual}>
+          <View style={styles.speciesVisualGlow} />
+          <Text style={styles.speciesEmoji}>
+            {speciesVisual.emoji}
+          </Text>
+          <Text style={styles.speciesKind}>
+            {speciesVisual.label}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.seasonRowContent}>
-        <View style={styles.seasonRowTop}>
-          <Text style={styles.seasonSpecies}>
-            {item.species}
-          </Text>
-
-          <View
-            style={[
-              styles.seasonBadge,
-              { backgroundColor: visual.background },
-            ]}
-          >
-            <Text
-              style={[
-                styles.seasonBadgeText,
-                { color: visual.color },
-              ]}
-            >
-              {item.status_label}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.seasonSpecies}>
+          {item.species}
+        </Text>
 
         <Text style={styles.seasonPeriod}>
           {item.period}
@@ -1004,29 +1501,194 @@ function SeasonRow({
 
         <Text
           style={styles.seasonSummary}
-          numberOfLines={2}
+          numberOfLines={3}
         >
           {item.summary}
         </Text>
 
         <Pressable
-          style={styles.sourceLink}
+          style={({ pressed }) => [
+            styles.sourceLink,
+            pressed && styles.sourceLinkPressed,
+          ]}
           onPress={() => {
             void Linking.openURL(item.source_url);
           }}
         >
           <Text style={styles.sourceLinkText}>
-            Fuente: {item.authority}
+            Ver normativa · {item.authority}
           </Text>
           <Ionicons
             name="open-outline"
-            size={14}
+            size={15}
             color="#F0B34C"
           />
         </Pressable>
       </View>
+
+      <View
+        style={[
+          styles.seasonStatusPanel,
+          {
+            backgroundColor: visual.background,
+            borderColor: visual.color,
+          },
+        ]}
+      >
+        <Ionicons
+          name={visual.icon}
+          size={30}
+          color={visual.color}
+        />
+        <Text
+          style={[
+            styles.seasonStatusKicker,
+            { color: visual.color },
+          ]}
+        >
+          ESTADO
+        </Text>
+        <Text
+          style={[
+            styles.seasonStatusLabel,
+            { color: visual.color },
+          ]}
+        >
+          {item.status_label}
+        </Text>
+      </View>
     </View>
   );
+}
+
+
+function normalizeSpeciesName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function getSpeciesVisual(
+  species: string,
+  category: string,
+): {
+  emoji: string;
+  label: string;
+  image: number | null;
+  info: SpeciesInfo;
+} {
+  const value = normalizeSpeciesName(`${species} ${category}`);
+
+  let match: SpeciesInfo | undefined;
+
+  if (
+    value.includes('chinook') ||
+    value.includes('salmon rey')
+  ) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'salmon-chinook');
+  } else if (
+    value.includes('arcoiris') ||
+    value.includes('salmonido')
+  ) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'trucha-arcoiris');
+  } else if (
+    value.includes('fario') ||
+    value.includes('trucha cafe')
+  ) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'trucha-fario');
+  } else if (
+    value.includes('trucha negra') ||
+    value.includes('perca')
+  ) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'perca');
+  } else if (value.includes('carpa')) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'carpa');
+  } else if (value.includes('pejerrey')) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'pejerrey');
+  } else if (value.includes('corvina')) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'corvina');
+  } else if (
+    value.includes('merluza') ||
+    value.includes('merlusa')
+  ) {
+    match = SPECIES_LIBRARY.find((item) => item.key === 'merlusa');
+  }
+
+  if (match) {
+    return {
+      emoji: '🐟',
+      label: match.environment === 'Mar / costa' ? 'MAR' : 'PESCA',
+      image: match.image,
+      info: match,
+    };
+  }
+
+  if (value.includes('bagre')) {
+    return {
+      emoji: '🐟',
+      label: 'PESCA',
+      image: null,
+      info: {
+        key: 'bagre',
+        label: 'Bagre',
+        image: SPECIES_LIBRARY[0].image,
+        habitat: 'Aguas continentales; presencia variable según cuenca.',
+        description:
+          'Ficha referencial. Podemos agregar una imagen real del bagre chileno cuando la tengas disponible.',
+        environment: 'Agua dulce',
+      },
+    };
+  }
+
+  if (
+    value.includes('conejo') ||
+    value.includes('liebre')
+  ) {
+    return {
+      emoji: '🐇',
+      label: 'CAZA',
+      image: null,
+      info: {
+        key: 'conejo-liebre',
+        label: 'Conejo / liebre',
+        image: SPECIES_LIBRARY[0].image,
+        habitat: 'Sectores rurales, praderas y matorrales.',
+        description:
+          'Especies cinegéticas sujetas a normativa SAG. Más adelante podemos agregar su fotografía real.',
+        environment: 'Agua dulce',
+      },
+    };
+  }
+
+  if (
+    value.includes('pato') ||
+    value.includes('ave')
+  ) {
+    return {
+      emoji: '🦆',
+      label: 'CAZA',
+      image: null,
+      info: {
+        key: 'pato',
+        label: 'Patos autorizados',
+        image: SPECIES_LIBRARY[0].image,
+        habitat: 'Humedales, lagunas, vegas y riberas.',
+        description:
+          'Las especies autorizadas y sus temporadas dependen de la normativa SAG vigente.',
+        environment: 'Agua dulce',
+      },
+    };
+  }
+
+  const fallback = SPECIES_LIBRARY[0];
+
+  return {
+    emoji: category.toLowerCase().includes('pesca') ? '🎣' : '🌲',
+    label: category.toUpperCase(),
+    image: null,
+    info: fallback,
+  };
 }
 
 function getSeasonVisual(
@@ -1195,45 +1857,70 @@ function QuickCard({
   onPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+
+  function animate(toScale: number, toLift: number) {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: toScale,
+        useNativeDriver: true,
+        speed: 30,
+        bounciness: 8,
+      }),
+      Animated.spring(lift, {
+        toValue: toLift,
+        useNativeDriver: true,
+        speed: 30,
+        bounciness: 8,
+      }),
+    ]).start();
+  }
 
   return (
     <Animated.View
       style={[
         styles.quickWrapper,
-        { transform: [{ scale }] },
+        {
+          transform: [
+            { scale },
+            { translateY: lift },
+          ],
+        },
       ]}
     >
       <Pressable
-        style={styles.quickCard}
+        style={({ pressed }) => [
+          styles.quickCard,
+          pressed && styles.quickCardPressed,
+        ]}
         onPress={onPress}
-        onPressIn={() => {
-          Animated.spring(scale, {
-            toValue: 0.95,
-            useNativeDriver: true,
-            speed: 30,
-          }).start();
-        }}
-        onPressOut={() => {
-          Animated.spring(scale, {
-            toValue: 1,
-            useNativeDriver: true,
-            speed: 25,
-            bounciness: 8,
-          }).start();
-        }}
+        onPressIn={() => animate(0.965, 3)}
+        onPressOut={() => animate(1, 0)}
+        onHoverIn={() => animate(1.025, -6)}
+        onHoverOut={() => animate(1, 0)}
       >
         <View style={styles.quickIcon}>
           <Ionicons
             name={icon}
-            size={25}
-            color="#174A36"
+            size={27}
+            color="#39B5FF"
           />
         </View>
 
-        <Text style={styles.quickTitle}>{title}</Text>
-        <Text style={styles.quickDescription}>
-          {description}
-        </Text>
+        <View style={styles.quickTextBlock}>
+          <Text style={styles.quickTitle}>{title}</Text>
+          <Text style={styles.quickDescription}>
+            {description}
+          </Text>
+        </View>
+
+        <View style={styles.quickArrow}>
+          <Ionicons
+            name="arrow-forward"
+            size={18}
+            color="#39B5FF"
+          />
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -1434,6 +2121,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  notificationButtonPressed: {
+    transform: [{ scale: 0.94 }],
+    opacity: 0.82,
+  },
   notificationDot: {
     position: 'absolute',
     width: 8,
@@ -1442,6 +2133,74 @@ const styles = StyleSheet.create({
     backgroundColor: '#39B5FF',
     right: 10,
     top: 9,
+  },
+  notificationModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 10, 14, 0.76)',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    paddingTop: 78,
+    paddingHorizontal: 22,
+  },
+  notificationModalCard: {
+    width: '100%',
+    maxWidth: 430,
+    borderRadius: 26,
+    backgroundColor: '#06232E',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 200, 245, 0.22)',
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOpacity: 0.36,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 12,
+  },
+  notificationModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+    marginBottom: 14,
+  },
+  notificationModalEyebrow: {
+    color: '#F0B34C', fontSize: 9, fontWeight: '900', letterSpacing: 1.4,
+  },
+  notificationModalTitle: {
+    color: '#F3FAFF', fontSize: 25, fontWeight: '900', marginTop: 3,
+  },
+  notificationModalSubtitle: {
+    color: '#8FAAB5', fontSize: 12, marginTop: 3,
+  },
+  notificationModalClose: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notificationItem: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 11,
+    paddingVertical: 13, borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  notificationItemIcon: {
+    width: 40, height: 40, borderRadius: 13,
+    backgroundColor: 'rgba(57,181,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  notificationItemContent: { flex: 1 },
+  notificationItemTitle: {
+    color: '#ECF8FC', fontSize: 14, fontWeight: '900',
+  },
+  notificationItemText: {
+    color: '#9AB2BC', fontSize: 12, lineHeight: 18, marginTop: 3,
+  },
+  notificationMvpNote: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: 'rgba(240,179,76,0.08)', borderRadius: 14,
+    padding: 12, marginTop: 5,
+  },
+  notificationMvpNoteText: {
+    flex: 1, color: '#C7D4D9', fontSize: 10, lineHeight: 16,
   },
   hero: {
     minHeight: 330,
@@ -1454,6 +2213,14 @@ const styles = StyleSheet.create({
   heroContent: {
     padding: 28,
   },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 12,
+  },
   heroBadge: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1463,12 +2230,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    marginBottom: 12,
   },
   heroBadgeText: {
     color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 12,
+  },
+  heroLocationCard: {
+    maxWidth: 360,
+    minWidth: 220,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(3, 26, 34, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 200, 245, 0.28)',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  heroLocationIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(57, 181, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroLocationContent: {
+    flex: 1,
+  },
+  heroLocationEyebrow: {
+    color: '#8FB6C7',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  heroLocationText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: 2,
   },
   heroTitle: {
     color: '#FFFFFF',
@@ -1557,29 +2360,52 @@ const styles = StyleSheet.create({
     flexBasis: 200,
   },
   quickCard: {
-    minHeight: 132,
+    minHeight: 142,
     borderWidth: 1,
-    borderColor: 'rgba(123, 207, 244, 0.14)',
-    backgroundColor: 'rgba(6, 31, 41, 0.82)',
-    borderRadius: 20,
-    padding: 17,
+    borderColor: 'rgba(123, 207, 244, 0.18)',
+    backgroundColor: 'rgba(6, 31, 41, 0.90)',
+    borderRadius: 22,
+    padding: 18,
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'hidden',
     shadowColor: '#000000',
-    shadowOpacity: 0.05,
-    shadowRadius: 13,
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
     shadowOffset: {
       width: 0,
-      height: 5,
+      height: 9,
     },
+    elevation: 5,
+  },
+  quickCardPressed: {
+    borderColor: 'rgba(57, 181, 255, 0.50)',
+    backgroundColor: 'rgba(8, 43, 56, 0.96)',
   },
   quickIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: 'rgba(57, 181, 255, 0.12)',
+    backgroundColor: 'rgba(57, 181, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(57, 181, 255, 0.22)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 11,
+  },
+  quickTextBlock: {
+    paddingRight: 34,
+  },
+  quickArrow: {
+    position: 'absolute',
+    right: 18,
+    bottom: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(57, 181, 255, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickTitle: {
     color: '#EDF8FC',
@@ -1650,45 +2476,110 @@ const styles = StyleSheet.create({
   },
   seasonRow: {
     flexDirection: 'row',
-    gap: 13,
+    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    gap: 16,
     paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   seasonRowLast: {
     borderBottomWidth: 0,
   },
-  seasonStatusIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+  speciesVisual: {
+    width: 112,
+    minHeight: 122,
+    borderRadius: 20,
+    backgroundColor: 'rgba(57, 181, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(57, 181, 255, 0.16)',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  speciesVisualPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.97 }],
+  },
+  speciesPhoto: {
+    width: '96%',
+    height: 88,
+    marginTop: 4,
+  },
+  speciesImageShade: {
+    ...StyleSheet.absoluteFill,
+    top: 70,
+    backgroundColor: 'rgba(3, 26, 34, 0.26)',
+  },
+  speciesImageLabel: {
+    minHeight: 30,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(3, 26, 34, 0.88)',
+  },
+  speciesVisualGlow: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(57, 181, 255, 0.09)',
+    top: 10,
+  },
+  speciesEmoji: {
+    fontSize: 38,
+  },
+  speciesKind: {
+    color: '#7FB7CF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+  },
+  speciesTapHint: {
+    color: '#EAF7FC',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.8,
   },
   seasonRowContent: {
-    flex: 1,
-  },
-  seasonRowTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 360,
+    justifyContent: 'center',
+    minWidth: 190,
   },
   seasonSpecies: {
-    flex: 1,
     color: '#EDF8FC',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  seasonStatusPanel: {
+    width: 160,
+    minHeight: 116,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  seasonStatusKicker: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+    marginTop: 8,
+  },
+  seasonStatusLabel: {
     fontSize: 15,
+    lineHeight: 19,
     fontWeight: '900',
-  },
-  seasonBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  seasonBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: 3,
   },
   seasonPeriod: {
     color: '#B1C7D0',
@@ -1708,6 +2599,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginTop: 7,
+  },
+  sourceLinkPressed: {
+    opacity: 0.65,
   },
   sourceLinkText: {
     color: '#F0B34C',
@@ -1736,53 +2630,228 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
   },
-  credentialHomeCard: {
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: 'rgba(123, 207, 244, 0.12)',
-    flexDirection: 'row',
+  speciesModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 10, 14, 0.74)',
     alignItems: 'center',
-    gap: 13,
-    backgroundColor: 'rgba(6, 31, 41, 0.82)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  speciesModalCard: {
+    width: '100%',
+    maxWidth: 680,
+    maxHeight: '88%',
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#06232E',
+    borderWidth: 1,
+    borderColor: 'rgba(100, 200, 245, 0.22)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: {
+      width: 0,
+      height: 14,
+    },
+    elevation: 12,
+  },
+  speciesModalImageWrap: {
+    height: 270,
+    backgroundColor: '#DDE9E7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  speciesModalImage: {
+    width: '94%',
+    height: '90%',
+  },
+  speciesModalEnvironment: {
+    position: 'absolute',
+    left: 18,
+    bottom: 16,
+    borderRadius: 999,
+    backgroundColor: 'rgba(3, 26, 34, 0.88)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  speciesModalEnvironmentText: {
+    color: '#9BDDF8',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  speciesModalBody: {
+    padding: 22,
+  },
+  speciesModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  speciesModalHeaderText: {
+    flex: 1,
+  },
+  speciesModalEyebrow: {
+    color: '#F0B34C',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+  speciesModalTitle: {
+    color: '#F3FAFF',
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  speciesModalClose: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    paddingHorizontal: 17,
-    paddingVertical: 15,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speciesModalInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 22,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(57, 181, 255, 0.08)',
+  },
+  speciesModalInfoContent: {
+    flex: 1,
+  },
+  speciesModalInfoLabel: {
+    color: '#9BDDF8',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  speciesModalInfoText: {
+    color: '#E5F2F6',
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 3,
+  },
+  speciesModalDescription: {
+    color: '#B4C9D1',
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 18,
+  },
+  speciesModalNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 18,
+    borderRadius: 15,
+    backgroundColor: 'rgba(240, 179, 76, 0.09)',
+    padding: 13,
+  },
+  speciesModalNoticeText: {
+    flex: 1,
+    color: '#C7D4D9',
+    fontSize: 11,
+    lineHeight: 17,
   },
 
-  credentialHomeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 15,
-    backgroundColor: '#073B4A',
+  credentialHomeCard: {
+    minHeight: 128,
+    borderWidth: 1,
+    borderColor: 'rgba(123, 207, 244, 0.18)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 16,
+    backgroundColor: 'rgba(6, 31, 41, 0.92)',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    elevation: 4,
+  },
+
+  credentialHomeIllustration: {
+    width: 78,
+    height: 78,
+    borderRadius: 22,
+    backgroundColor: 'rgba(57, 181, 255, 0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(57, 181, 255, 0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
+  credentialFishingEmoji: {
+    fontSize: 40,
+  },
+
   credentialHomeContent: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 300,
+  },
+
+  credentialHomeEyebrow: {
+    color: '#F0B34C',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.3,
+    marginBottom: 4,
   },
 
   credentialHomeTitle: {
     color: '#EDF8FC',
-    fontSize: 15,
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: '900',
   },
 
   credentialHomeMuted: {
     color: '#91AAB4',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+
+  credentialHomeAction: {
+    minHeight: 44,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    backgroundColor: '#39B5FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+
+  credentialHomeActionText: {
+    color: '#031A22',
     fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
+    fontWeight: '900',
   },
 
   credentialHomeBadge: {
+    minHeight: 44,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   credentialHomeBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '900',
   },
 

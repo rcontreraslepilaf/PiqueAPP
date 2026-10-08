@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -11,6 +11,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.credential import Credential
 from app.models.user import User
 from app.schemas.credential import CredentialCreate, CredentialRead
+from app.services.images import read_clean_image
 
 
 router = APIRouter(prefix="/credentials", tags=["credentials"])
@@ -24,11 +25,6 @@ STORAGE_ROOT = Path(
 STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
-
-ALLOWED_IMAGE_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-}
 
 
 def get_user_credential(
@@ -52,11 +48,23 @@ def get_user_credential(
     return credential
 
 
-def document_path(relative_path: str) -> Path:
+def document_path(relative_path: str, owner_id: UUID) -> Path:
     root = STORAGE_ROOT.resolve()
+    relative = PurePosixPath(relative_path)
+    owner_folder = root / str(owner_id)
     target = (root / relative_path).resolve()
 
-    if target != root and root not in target.parents:
+    # Server-generated keys are <owner UUID>/<filename>. Check the key and
+    # resolved path to reject other owners, traversal and symlink escapes.
+    if (
+        "\\" in relative_path
+        or relative.is_absolute()
+        or len(relative.parts) != 2
+        or relative.parts[0] != str(owner_id)
+        or owner_folder.resolve() != owner_folder
+        or target.parent != owner_folder
+        or target.suffix.lower() not in {".jpg", ".png"}
+    ):
         raise HTTPException(
             status_code=400,
             detail="Invalid document path",
@@ -65,11 +73,16 @@ def document_path(relative_path: str) -> Path:
     return target
 
 
-def remove_document(relative_path: str | None) -> None:
+def remove_document(relative_path: str | None, owner_id: UUID) -> None:
     if not relative_path:
         return
 
-    target = document_path(relative_path)
+    try:
+        target = document_path(relative_path, owner_id)
+    except HTTPException:
+        # Do not delete files referenced by invalid legacy records; still
+        # allow the owner to replace the document or delete their record.
+        return
 
     if target.exists() and target.is_file():
         target.unlink()
@@ -110,7 +123,7 @@ def create_credential(
         license_number=payload.license_number or None,
         valid_from=payload.valid_from,
         expires_at=payload.expires_at,
-        document_url=payload.document_url or None,
+        document_url=None,
         notes=payload.notes or None,
     )
 
@@ -137,69 +150,33 @@ async def upload_credential_document(
         db,
     )
 
-    content_type = (
-        file.content_type or ""
-    ).lower()
+    image = await read_clean_image(file, MAX_IMAGE_BYTES)
+    extension = image.extension
 
-    extension = ALLOWED_IMAGE_TYPES.get(
-        content_type
-    )
-
-    if extension is None:
-        raise HTTPException(
-            status_code=415,
-            detail="Only JPG and PNG images are allowed",
-        )
-
-    data = await file.read(
-        MAX_IMAGE_BYTES + 1
-    )
-
-    if not data:
-        raise HTTPException(
-            status_code=400,
-            detail="The image is empty",
-        )
-
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="The image exceeds the 8 MB limit",
-        )
-
-    user_folder = (
-        STORAGE_ROOT /
-        str(current_user.id)
-    )
+    filename = f"{uuid4().hex}{extension}"
+    relative_path = f"{current_user.id}/{filename}"
+    target = document_path(relative_path, current_user.id)
+    user_folder = target.parent
     user_folder.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    filename = (
-        f"{uuid4().hex}{extension}"
-    )
-
-    target = (
-        user_folder / filename
-    )
-
-    target.write_bytes(data)
+    target.write_bytes(image.data)
 
     previous_document = (
         credential.document_url
     )
 
-    credential.document_url = (
-        f"{current_user.id}/{filename}"
-    )
+    credential.document_url = relative_path
 
     db.add(credential)
     db.commit()
     db.refresh(credential)
 
     remove_document(
-        previous_document
+        previous_document,
+        current_user.id,
     )
 
     return credential
@@ -226,10 +203,11 @@ def read_credential_document(
         )
 
     target = document_path(
-        credential.document_url
+        credential.document_url,
+        current_user.id,
     )
 
-    if not target.exists():
+    if not target.is_file():
         raise HTTPException(
             status_code=404,
             detail="Credential image not found",
@@ -267,7 +245,8 @@ def delete_credential_document(
     )
 
     remove_document(
-        credential.document_url
+        credential.document_url,
+        current_user.id,
     )
 
     credential.document_url = None
@@ -292,7 +271,8 @@ def delete_credential(
     )
 
     remove_document(
-        credential.document_url
+        credential.document_url,
+        current_user.id,
     )
 
     db.delete(credential)
